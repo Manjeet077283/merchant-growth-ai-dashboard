@@ -1,0 +1,25 @@
+{
+  "name": "merchant-growth-ai",
+  "version": "1.0.0",
+  "description": "Merchant Growth AI — Intelligent Business Agent for PayPal AI Hackathon 2026",
+  "private": true,
+  "scripts": {
+    "install:all": "npm --prefix frontend install",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "build:frontend": "npm --prefix frontend run build",
+    "test:backend": "powershell -Command \"$env:PYTHONPATH='backend'; python -m pytest backend/tests/test_services_and_endpoints.py -v\""
+  },
+  "keywords": [
+    "paypal",
+    "hackathon",
+    "fastapi",
+    "react",
+    "vite",
+    "tailwind",
+    "recharts",
+    "gemini",
+    "ai-agent"
+  ],
+  "author": "Merchant Growth AI Team",
+  "license": "MIT"
+}
