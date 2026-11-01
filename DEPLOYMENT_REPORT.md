@@ -69,7 +69,7 @@ Merchant Growth AI is designed as a modern decoupled full-stack application that
 | **Grounded AI Queries (English)** | 5 queries tested against live SQLite data | Verified factual calculations |
 | **Grounded AI Queries (Hindi)** | Tested Devanagari and transliterated queries | Verified accurate Hindi response |
 | **Voice Assistant Pipeline** | Web Speech API, SpeechSynthesis, and State machine | Verified state transitions |
-| **Live Local Server** | `http://127.0.0.1:8000` & `http://localhost:5173` | Responding 200 OK |
+| **Live Local Server** | `https://merchant-growth-ai-dashboard.onrender.com` & `http://localhost:5173` | Responding 200 OK |
 
 ---
 

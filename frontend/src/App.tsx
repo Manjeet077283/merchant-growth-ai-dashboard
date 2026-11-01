@@ -173,7 +173,7 @@ export const App: React.FC = () => {
           <div className="bg-rose-50 border-b border-rose-200 px-8 py-2.5 text-xs text-rose-800 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-              <span>{errorMessage}. Ensure the FastAPI backend is running on <code>http://127.0.0.1:8000</code>.</span>
+              <span>{errorMessage}. Ensure the FastAPI backend is running on <code>https://merchant-growth-ai-dashboard.onrender.com</code>.</span>
             </div>
             <button
               onClick={() => fetchDashboardData(analyticsDays)}

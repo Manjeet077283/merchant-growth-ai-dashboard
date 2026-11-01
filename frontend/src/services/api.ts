@@ -27,7 +27,7 @@ async function fetchWithTimeout(
     return response;
   } catch (err: any) {
     if (err.name === 'AbortError') {
-      throw new Error(`Request timed out after ${timeoutMs / 1000}s. Ensure FastAPI backend is running at http://127.0.0.1:8000.`);
+      throw new Error(`Request timed out after ${timeoutMs / 1000}s. Ensure FastAPI backend is running at https://merchant-growth-ai-dashboard.onrender.com`);
     }
     throw err;
   } finally {
