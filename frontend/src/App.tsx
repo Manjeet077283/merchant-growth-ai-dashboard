@@ -173,11 +173,11 @@ export const App: React.FC = () => {
           <div className="bg-rose-50 border-b border-rose-200 px-8 py-2.5 text-xs text-rose-800 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-              <span>{errorMessage}. Ensure the FastAPI backend is running on <code>https://merchant-growth-ai-dashboard.onrender.com</code>.</span>
+              <span>{errorMessage}. Target backend: <code>{api.getBaseUrl()}</code></span>
             </div>
             <button
               onClick={() => fetchDashboardData(analyticsDays)}
-              className="font-bold underline"
+              className="font-bold underline ml-4 hover:text-rose-950 transition-colors"
             >
               Retry
             </button>
@@ -190,6 +190,7 @@ export const App: React.FC = () => {
             <div className="flex flex-col items-center justify-center h-96 text-slate-400 space-y-3">
               <div className="w-8 h-8 border-3 border-[#0070E0] border-t-transparent rounded-full animate-spin" />
               <p className="text-xs font-semibold text-[#6B7A90]">Loading merchant intelligence metrics...</p>
+              <p className="text-[11px] text-slate-400 font-medium">Connecting to {api.getBaseUrl()} (free tier backends may take 15-30s to wake up)</p>
             </div>
           ) : (
             <>

@@ -4,13 +4,13 @@
 # ==============================================================================
 
 services:
-  # Unified Full-Stack Web Service (FastAPI + React Frontend)
+  # 1. FastAPI Backend Web Service
   - type: web
-    name: merchant-growth-ai
+    name: merchant-growth-ai-dashboard
     env: python
     plan: free
     region: oregon
-    buildCommand: "npm --prefix frontend install && npm --prefix frontend run build && pip install -r requirements.txt"
+    buildCommand: "pip install -r requirements.txt"
     startCommand: "python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT --app-dir backend"
     healthCheckPath: /api/health
     envVars:
@@ -33,4 +33,19 @@ services:
       - key: GEMINI_MODEL
         value: gemini-2.5-flash
       - key: CORS_ORIGINS
-        value: "*"
+        value: "https://merchant-growth-ai-dashboard.onrender.com"
+
+  # 2. React + Vite Frontend Static Site
+  - type: static
+    name: merchant-growth-ai-frontend
+    plan: free
+    region: oregon
+    buildCommand: "npm --prefix frontend install && npm --prefix frontend run build"
+    staticPublishPath: "./frontend/dist"
+    routes:
+      - type: rewrite
+        source: "/*"
+        destination: "/index.html"
+    envVars:
+      - key: VITE_API_BASE_URL
+        value: "https://merchant-growth-ai-dashboard.onrender.com"

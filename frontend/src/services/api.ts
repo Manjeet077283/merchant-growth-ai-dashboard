@@ -10,12 +10,42 @@ import {
   MerchantProfile
 } from '../types';
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '') + '/api';
+/**
+ * Intelligently resolves the API Base URL with multi-tiered production resilience:
+ * 1. Build-time or runtime environment variable (VITE_API_BASE_URL) if defined.
+ * 2. If running in a production browser environment:
+ *    - If loaded on the backend domain itself (unified deployment): returns relative '/api'.
+ *    - If loaded on a separate Render Static Site and VITE_API_BASE_URL was omitted at build time:
+ *      automatically routes to the live backend 'https://merchant-growth-ai-dashboard.onrender.com/api'.
+ * 3. In local development (localhost / 127.0.0.1): returns '/api' (handled by Vite dev server proxy).
+ */
+export const getApiBaseUrl = (): string => {
+  const envUrl = (import.meta.env.VITE_API_BASE_URL || '').trim();
+  if (envUrl) {
+    return envUrl.replace(/\/$/, '') + '/api';
+  }
+
+  if (typeof window !== 'undefined') {
+    const { hostname, origin } = window.location;
+    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0';
+
+    if (!isLocalhost) {
+      if (origin === 'https://merchant-growth-ai-dashboard.onrender.com') {
+        return '/api';
+      }
+      return 'https://merchant-growth-ai-dashboard.onrender.com/api';
+    }
+  }
+
+  return '/api';
+};
+
+const API_BASE = getApiBaseUrl();
 
 async function fetchWithTimeout(
   url: string,
   options: RequestInit = {},
-  timeoutMs: number = 15000
+  timeoutMs: number = 25000
 ): Promise<Response> {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
@@ -27,7 +57,7 @@ async function fetchWithTimeout(
     return response;
   } catch (err: any) {
     if (err.name === 'AbortError') {
-      throw new Error(`Request timed out after ${timeoutMs / 1000}s. Ensure FastAPI backend is running at https://merchant-growth-ai-dashboard.onrender.com`);
+      throw new Error(`Request timed out after ${timeoutMs / 1000}s. The backend may be spinning up from sleep (Render free tier). Please retry in a moment.`);
     }
     throw err;
   } finally {
@@ -36,9 +66,13 @@ async function fetchWithTimeout(
 }
 
 export const api = {
+  getBaseUrl() {
+    return API_BASE;
+  },
+
   async getHealth() {
-    const res = await fetchWithTimeout(`${API_BASE}/health`, {}, 8000);
-    if (!res.ok) throw new Error('Failed to fetch health');
+    const res = await fetchWithTimeout(`${API_BASE}/health`, {}, 30000);
+    if (!res.ok) throw new Error(`Health check returned HTTP ${res.status}`);
     return res.json();
   },
 

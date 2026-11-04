@@ -34,15 +34,19 @@ class Settings(BaseModel):
     # CORS
     @property
     def cors_origins_list(self) -> list[str]:
-        raw = os.getenv("CORS_ORIGINS", "")
-        if raw:
-            return [origin.strip() for origin in raw.split(",") if origin.strip()]
-        return [
+        origins = [
             "http://localhost:5173",
             "http://127.0.0.1:5173",
             "http://localhost:3000",
             "http://127.0.0.1:3000",
-            "*"
+            "https://merchant-growth-ai-dashboard.onrender.com"
         ]
+        raw = os.getenv("CORS_ORIGINS", "")
+        if raw:
+            for item in raw.split(","):
+                cleaned = item.strip()
+                if cleaned and cleaned != "*" and cleaned not in origins:
+                    origins.append(cleaned)
+        return origins
 
 settings = Settings()

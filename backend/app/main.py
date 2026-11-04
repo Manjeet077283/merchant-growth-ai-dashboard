@@ -28,14 +28,20 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS Middleware
+# CORS Middleware with explicit trusted origins, wildcard-safe credentials, and Render domain regex
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
+    allow_origin_regex=r"^https://.*\.onrender\.com$",
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
 )
+
+# Root-level health check alias
+@app.get("/health", tags=["Health"])
+def root_health():
+    return health.get_health()
 
 # Register Routers
 app.include_router(health.router)
