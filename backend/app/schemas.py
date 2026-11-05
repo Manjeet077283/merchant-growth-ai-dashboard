@@ -116,6 +116,7 @@ class PayPalCreateOrderRequest(BaseModel):
     currency: str = "USD"
     customer_name: Optional[str] = "Demo Shopper"
     customer_email: Optional[str] = "shopper@sandbox.demo"
+    is_sample: Optional[bool] = False
 
 class PayPalCreateOrderResponse(BaseModel):
     order_id: str

@@ -38,7 +38,8 @@ def create_paypal_order(payload: PayPalCreateOrderRequest):
             items=items_list,
             currency=payload.currency,
             customer_name=payload.customer_name,
-            customer_email=payload.customer_email
+            customer_email=payload.customer_email,
+            is_sample=payload.is_sample or False
         )
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))

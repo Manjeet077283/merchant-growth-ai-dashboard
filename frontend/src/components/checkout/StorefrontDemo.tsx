@@ -12,7 +12,11 @@ import {
   ExternalLink,
   AlertCircle,
   RefreshCw,
-  Sparkles
+  Sparkles,
+  Zap,
+  ArrowRight,
+  TrendingUp,
+  CreditCard
 } from 'lucide-react';
 
 interface StorefrontDemoProps {
@@ -38,7 +42,9 @@ export const StorefrontDemo: React.FC<StorefrontDemoProps> = ({
   const [cart, setCart] = useState<{ product: Product; qty: number }[]>([]);
   const [customerName, setCustomerName] = useState('Sarah Jenkins');
   const [customerEmail, setCustomerEmail] = useState('sarah.jenkins@sandbox.demo');
+  const [checkoutMode, setCheckoutMode] = useState<'sample' | 'paypal_sandbox'>('sample');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [quickBuyingId, setQuickBuyingId] = useState<number | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
   const [pendingOrder, setPendingOrder] = useState<PendingPayPalOrder | null>(null);
   const [successDetails, setSuccessDetails] = useState<any | null>(null);
@@ -87,6 +93,47 @@ export const StorefrontDemo: React.FC<StorefrontDemoProps> = ({
   const estimatedFee = Math.round((cartSubtotal * 0.029 + 0.3) * 100) / 100;
   const estimatedNet = Math.max(0, Math.round((cartSubtotal - estimatedFee) * 100) / 100);
 
+  // Quick 1-Click Buy Sample directly on any product card
+  const handleQuickSampleBuy = async (product: Product) => {
+    setErrorMessage(null);
+    setQuickBuyingId(product.id);
+
+    try {
+      const orderItems: OrderItem[] = [{
+        sku: product.sku,
+        name: product.name,
+        qty: 1,
+        unit_price: product.price,
+        category: product.category,
+      }];
+
+      const created = await api.createPayPalOrder(
+        orderItems,
+        customerName.trim() || 'Sarah Jenkins',
+        customerEmail.trim() || 'sarah.jenkins@sandbox.demo',
+        true // force instant sample mode
+      );
+
+      const captured = await api.capturePayPalOrder(
+        created.order_id,
+        orderItems,
+        customerName.trim() || 'Sarah Jenkins',
+        customerEmail.trim() || 'sarah.jenkins@sandbox.demo'
+      );
+
+      if (captured.status === 'COMPLETED' || captured.success) {
+        setSuccessDetails(captured);
+        onOrderCompleted();
+      } else {
+        setErrorMessage(captured.message || 'Sample checkout capture failed.');
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to process sample order.');
+    } finally {
+      setQuickBuyingId(null);
+    }
+  };
+
   // Initiate Order & Process
   const handleInitiateOrder = async () => {
     if (cart.length === 0) return;
@@ -116,15 +163,18 @@ export const StorefrontDemo: React.FC<StorefrontDemoProps> = ({
         category: item.product.category,
       }));
 
+      const isSampleOrder = checkoutMode === 'sample' || !payPalConfig?.client_id_configured;
+
       // Server-side order creation
       const created = await api.createPayPalOrder(
         orderItems,
         trimmedName,
-        trimmedEmail
+        trimmedEmail,
+        isSampleOrder
       );
 
-      // If live PayPal credentials are configured, require buyer sandbox approval
-      if (payPalConfig?.client_id_configured && created.approval_url) {
+      // If user chose official PayPal Sandbox and credentials exist, open buyer approval flow
+      if (!isSampleOrder && payPalConfig?.client_id_configured && created.approval_url) {
         setPendingOrder({
           order_id: created.order_id,
           status: created.status,
@@ -134,7 +184,7 @@ export const StorefrontDemo: React.FC<StorefrontDemoProps> = ({
         });
         window.open(created.approval_url, '_blank', 'noopener,noreferrer');
       } else {
-        // Sample demonstration mode: automatically verify and capture to ledger
+        // Sample demonstration mode: automatically verify and capture to real SQLite ledger
         const captured = await api.capturePayPalOrder(
           created.order_id,
           orderItems,
@@ -213,20 +263,21 @@ export const StorefrontDemo: React.FC<StorefrontDemoProps> = ({
       <div className="flex items-center justify-between pb-4 border-b border-slate-100">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="text-xl font-bold text-[#172B4D]">PayPal Sandbox Demo Store</h2>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#EAF3FC] text-[#0070E0] border border-blue-200">
-              Live Testbed
+            <h2 className="text-xl font-bold text-[#172B4D]">Demo Storefront &amp; Checkout</h2>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+              <Zap className="w-3 h-3 text-emerald-600" />
+              Live Ledger Enabled
             </span>
           </div>
           <p className="text-xs text-slate-400 mt-0.5">
-            Test authentic server-side payment capture and see immediate updates in your dashboard.
+            Buy sample products to demonstrate real server-side payment capture, ledger updates, and AI dashboard analytics.
           </p>
         </div>
 
         {onClose && (
           <button
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+            className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -261,17 +312,33 @@ export const StorefrontDemo: React.FC<StorefrontDemoProps> = ({
                     </p>
                   </div>
 
-                  <div className="flex items-center justify-between pt-2 border-t border-slate-50">
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-50 gap-2">
                     <span className="text-base font-extrabold text-[#172B4D]">
                       ${prod.price.toFixed(2)}
                     </span>
-                    <button
-                      onClick={() => addToCart(prod)}
-                      className="px-3.5 py-1.5 bg-[#EAF3FC] hover:bg-[#0070E0] text-[#0070E0] hover:text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      Add to Cart
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => handleQuickSampleBuy(prod)}
+                        disabled={quickBuyingId === prod.id || isProcessing}
+                        title="Instantly buy 1 sample of this product and record directly to ledger"
+                        className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                      >
+                        {quickBuyingId === prod.id ? (
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Zap className="w-3.5 h-3.5" />
+                        )}
+                        <span>Sample Buy</span>
+                      </button>
+
+                      <button
+                        onClick={() => addToCart(prod)}
+                        className="px-3 py-1.5 bg-[#EAF3FC] hover:bg-[#0070E0] text-[#0070E0] hover:text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Add
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -298,7 +365,7 @@ export const StorefrontDemo: React.FC<StorefrontDemoProps> = ({
                 Your cart is empty. Pick items from the catalog.
               </div>
             ) : (
-              <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
+              <div className="space-y-2.5 max-h-52 overflow-y-auto pr-1">
                 {cart.map((item) => (
                   <div
                     key={item.product.id}
@@ -367,6 +434,39 @@ export const StorefrontDemo: React.FC<StorefrontDemoProps> = ({
               </div>
             </div>
 
+            {/* Checkout Mode Selector */}
+            <div className="pt-2 border-t border-slate-50">
+              <label className="block text-[11px] font-bold text-[#6B7A90] mb-1.5">
+                Checkout Method
+              </label>
+              <div className="grid grid-cols-2 gap-1.5 bg-[#F5F7FA] p-1 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setCheckoutMode('sample')}
+                  className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                    checkoutMode === 'sample'
+                      ? 'bg-white text-emerald-700 shadow-2xs'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  <Zap className="w-3 h-3 text-emerald-600" />
+                  <span>Sample Order</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCheckoutMode('paypal_sandbox')}
+                  className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                    checkoutMode === 'paypal_sandbox'
+                      ? 'bg-white text-[#0070E0] shadow-2xs'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  <CreditCard className="w-3 h-3 text-[#0070E0]" />
+                  <span>PayPal Sandbox</span>
+                </button>
+              </div>
+            </div>
+
             {/* Price Calculations */}
             <div className="space-y-1.5 pt-2 border-t border-slate-50 text-xs">
               <div className="flex justify-between text-slate-500">
@@ -380,7 +480,7 @@ export const StorefrontDemo: React.FC<StorefrontDemoProps> = ({
               <div className="flex justify-between text-emerald-600 font-bold pt-1.5 border-t border-dashed border-slate-200">
                 <div>
                   <span>Est. Net Payout</span>
-                  <p className="text-[10px] text-slate-400 font-normal">Final fee &amp; net recorded upon capture</p>
+                  <p className="text-[10px] text-slate-400 font-normal">Recorded to database ledger upon capture</p>
                 </div>
                 <span>${estimatedNet.toFixed(2)}</span>
               </div>
@@ -394,15 +494,33 @@ export const StorefrontDemo: React.FC<StorefrontDemoProps> = ({
               </div>
             )}
 
-            {/* Demonstration Helper Box */}
-            {!payPalConfig?.client_id_configured && (
-              <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-[#003087] text-[11px] leading-relaxed flex items-start gap-2">
-                <Sparkles className="w-4 h-4 text-[#0070E0] shrink-0 mt-0.5" />
+            {/* Mode Explanations */}
+            {checkoutMode === 'sample' ? (
+              <div className="p-3 rounded-xl bg-emerald-50/70 border border-emerald-200/80 text-emerald-900 text-[11px] leading-relaxed flex items-start gap-2">
+                <Sparkles className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                 <div>
-                  <span className="font-bold">Sample Order Mode Active:</span> You can buy samples right now to test the complete workflow and see your live dashboard metrics update in real time.
+                  <span className="font-bold">Instant Sample Order:</span> 1-click server-side capture that records directly to the SQLite ledger and updates your Gross Sales, Orders, and AI metrics immediately.
                 </div>
               </div>
-            )}
+            ) : !payPalConfig?.client_id_configured ? (
+              <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-[#003087] text-[11px] leading-relaxed space-y-1.5">
+                <div className="flex items-center gap-1.5 font-bold">
+                  <AlertCircle className="w-3.5 h-3.5 text-[#0070E0]" />
+                  <span>PayPal REST API Keys Not Found in Render</span>
+                </div>
+                <p className="text-slate-600">
+                  To test live PayPal buyer login popups, enter <code>PAYPAL_CLIENT_ID</code> and <code>PAYPAL_CLIENT_SECRET</code> in Render.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setCheckoutMode('sample')}
+                  className="text-xs font-bold text-[#0070E0] hover:underline flex items-center gap-1 pt-0.5 cursor-pointer"
+                >
+                  <span>Switch to Sample Order (Works Instantly)</span>
+                  <ArrowRight className="w-3 h-3" />
+                </button>
+              </div>
+            ) : null}
 
             {/* Multi-Step Checkout Action Area */}
             {pendingOrder ? (
@@ -460,32 +578,42 @@ export const StorefrontDemo: React.FC<StorefrontDemoProps> = ({
                 </div>
               </div>
             ) : (
-              /* Initiate Order Button (Active in both Sample & Configured Modes) */
+              /* Initiate Order Button */
               <div className="pt-2 space-y-2">
                 <button
                   onClick={handleInitiateOrder}
-                  disabled={cart.length === 0 || isProcessing}
-                  className="w-full py-3.5 px-4 rounded-2xl bg-[#0070E0] hover:bg-[#005bb8] active:scale-[0.99] text-white font-extrabold text-sm shadow-[0_4px_16px_rgba(0,112,224,0.3)] transition-all flex flex-col items-center justify-center gap-0.5 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  disabled={cart.length === 0 || isProcessing || (checkoutMode === 'paypal_sandbox' && !payPalConfig?.client_id_configured)}
+                  className={`w-full py-3.5 px-4 rounded-2xl active:scale-[0.99] text-white font-extrabold text-sm transition-all flex flex-col items-center justify-center gap-0.5 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer ${
+                    checkoutMode === 'sample'
+                      ? 'bg-emerald-600 hover:bg-emerald-700 shadow-[0_4px_16px_rgba(5,150,105,0.3)]'
+                      : 'bg-[#0070E0] hover:bg-[#005bb8] shadow-[0_4px_16px_rgba(0,112,224,0.3)]'
+                  }`}
                 >
                   {isProcessing ? (
                     <div className="flex items-center gap-2">
                       <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      <span>Processing Sample Order...</span>
+                      <span>Processing Order &amp; Recording to Ledger...</span>
                     </div>
                   ) : (
                     <>
                       <div className="flex items-center gap-2">
-                        <ShieldCheck className="w-4 h-4" />
+                        {checkoutMode === 'sample' ? (
+                          <Zap className="w-4 h-4" />
+                        ) : (
+                          <ShieldCheck className="w-4 h-4" />
+                        )}
                         <span>
-                          {payPalConfig?.client_id_configured
-                            ? `Pay with PayPal Sandbox ($${cartSubtotal.toFixed(2)})`
-                            : `Buy Sample Order ($${cartSubtotal.toFixed(2)})`}
+                          {checkoutMode === 'sample'
+                            ? `Buy Sample Order ($${cartSubtotal.toFixed(2)})`
+                            : `Pay with PayPal Sandbox ($${cartSubtotal.toFixed(2)})`}
                         </span>
                       </div>
-                      <span className="text-[10px] font-normal text-blue-100">
-                        {payPalConfig?.client_id_configured
-                          ? 'Live PayPal Sandbox REST API'
-                          : 'Demonstration Mode — Records to Live Ledger'}
+                      <span className="text-[10px] font-normal text-white/80">
+                        {checkoutMode === 'sample'
+                          ? 'Instant 1-Click Verification & Real Ledger Recording'
+                          : payPalConfig?.client_id_configured
+                          ? 'Official PayPal Sandbox Buyer Flow'
+                          : 'Configure credentials in Render to enable'}
                       </span>
                     </>
                   )}
@@ -499,15 +627,15 @@ export const StorefrontDemo: React.FC<StorefrontDemoProps> = ({
       {/* Confirmation Modal */}
       {successDetails && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 text-center space-y-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 text-center space-y-4 animate-in fade-in zoom-in duration-200">
             <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto shadow-2xs">
               <CheckCircle2 className="w-8 h-8" />
             </div>
 
             <div>
-              <h3 className="text-lg font-bold text-[#172B4D]">Payment Verified &amp; Captured!</h3>
+              <h3 className="text-lg font-bold text-[#172B4D]">Sample Payment Verified &amp; Captured!</h3>
               <p className="text-xs text-slate-400 mt-0.5">
-                Authoritative transaction recorded in SQLite database ledger.
+                Authoritative transaction successfully recorded in your SQLite database ledger.
               </p>
             </div>
 
@@ -525,6 +653,14 @@ export const StorefrontDemo: React.FC<StorefrontDemoProps> = ({
                 <span className="font-mono text-slate-700">{successDetails.capture_id}</span>
               </div>
               <div className="flex justify-between">
+                <span className="text-slate-400">Customer:</span>
+                <span className="text-[#172B4D] font-medium">{successDetails.customer_name}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Gross Sale:</span>
+                <span className="font-bold text-[#172B4D]">${successDetails.amount?.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
                 <span className="text-slate-400">Authoritative Fee:</span>
                 <span className="font-mono text-rose-600">-${successDetails.fee?.toFixed(2)}</span>
               </div>
@@ -536,15 +672,28 @@ export const StorefrontDemo: React.FC<StorefrontDemoProps> = ({
               </div>
             </div>
 
-            <button
-              onClick={() => {
-                setSuccessDetails(null);
-                if (onClose) onClose();
-              }}
-              className="w-full py-3 bg-[#0070E0] hover:bg-[#005bb8] text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
-            >
-              Done &amp; Return to Dashboard
-            </button>
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-2.5 text-[11px] text-emerald-800 flex items-center justify-center gap-1.5">
+              <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Gross Sales, Captured Payments, and Orders updated live!</span>
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={() => {
+                  setSuccessDetails(null);
+                  if (onClose) onClose();
+                }}
+                className="flex-1 py-3 bg-[#0070E0] hover:bg-[#005bb8] text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
+              >
+                View in Dashboard
+              </button>
+              <button
+                onClick={() => setSuccessDetails(null)}
+                className="py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all cursor-pointer"
+              >
+                Buy Another Sample
+              </button>
+            </div>
           </div>
         </div>
       )}

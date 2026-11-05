@@ -125,3 +125,52 @@ def test_duplicate_capture_prevention():
         db.query(Transaction).filter(Transaction.paypal_order_id == order_id).delete()
         db.commit()
         db.close()
+
+def test_instant_sample_checkout_lifecycle():
+    db = SessionLocal()
+    try:
+        items = [
+            OrderItemSchema(
+                sku="COF-SAMPLE-01",
+                name="Specialty Sample Roast",
+                qty=1,
+                unit_price=25.0,
+                category="Whole Bean Coffee"
+            )
+        ]
+        # Create explicit sample order
+        create_req = PayPalCreateOrderRequest(
+            items=items,
+            currency="USD",
+            customer_name="Test Shopper",
+            customer_email="shopper@test.demo",
+            is_sample=True
+        )
+        created = create_paypal_order(payload=create_req)
+        assert created.order_id.startswith("ORDER-SAMPLE-")
+        assert created.amount == 25.0
+
+        # Capture sample order
+        capture_req = PayPalCaptureOrderRequest(
+            order_id=created.order_id,
+            items=items,
+            customer_name="Test Shopper",
+            customer_email="shopper@test.demo"
+        )
+        captured = capture_paypal_order(payload=capture_req, db=db)
+        assert captured.success is True
+        assert captured.status == "COMPLETED"
+        assert captured.amount == 25.0
+        expected_fee = round(25.0 * 0.029 + 0.30, 2)
+        assert captured.fee == expected_fee
+        assert captured.net == round(25.0 - expected_fee, 2)
+
+        # Verify transaction persisted to SQLite database ledger
+        saved_txn = db.query(Transaction).filter(Transaction.paypal_order_id == created.order_id).first()
+        assert saved_txn is not None
+        assert saved_txn.is_demo is False
+        assert saved_txn.amount == 25.0
+    finally:
+        db.query(Transaction).filter(Transaction.customer_email == "shopper@test.demo").delete()
+        db.commit()
+        db.close()

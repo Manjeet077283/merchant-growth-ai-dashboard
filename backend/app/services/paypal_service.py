@@ -70,7 +70,8 @@ class PayPalService:
         items: List[Dict[str, Any]],
         currency: str = "USD",
         customer_name: Optional[str] = "Demo Shopper",
-        customer_email: Optional[str] = "shopper@sandbox.demo"
+        customer_email: Optional[str] = "shopper@sandbox.demo",
+        is_sample: bool = False
     ) -> Dict[str, Any]:
         if not items:
             raise ValueError("Cannot create PayPal order with an empty cart.")
@@ -81,9 +82,9 @@ class PayPalService:
         if subtotal <= 0:
             raise ValueError("Order subtotal must be greater than $0.00.")
 
-        token = self.get_access_token()
+        token = self.get_access_token() if not is_sample else None
 
-        if token and self.is_configured:
+        if token and self.is_configured and not is_sample:
             url = f"{self.api_base}/v2/checkout/orders"
             headers = {
                 "Authorization": f"Bearer {token}",

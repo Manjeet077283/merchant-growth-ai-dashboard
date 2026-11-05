@@ -156,7 +156,8 @@ export const api = {
   async createPayPalOrder(
     items: OrderItem[],
     customerName?: string,
-    customerEmail?: string
+    customerEmail?: string,
+    isSample: boolean = false
   ): Promise<{ order_id: string; status: string; approval_url?: string; amount: number; currency: string }> {
     const res = await fetchWithTimeout(`${API_BASE}/paypal/create-order`, {
       method: 'POST',
@@ -166,6 +167,7 @@ export const api = {
         currency: 'USD',
         customer_name: customerName,
         customer_email: customerEmail,
+        is_sample: isSample,
       }),
     }, 30000);
     if (!res.ok) {
