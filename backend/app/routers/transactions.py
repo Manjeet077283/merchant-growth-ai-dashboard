@@ -2,6 +2,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
+from app.config import settings
 from app.database import get_db
 from app.models import Transaction
 from app.schemas import (
@@ -21,6 +22,8 @@ def list_transactions(
     db: Session = Depends(get_db)
 ):
     q = db.query(Transaction)
+    if not settings.DEMO_MODE:
+        q = q.filter(Transaction.is_demo == False)
 
     if status and status.upper() != "ALL":
         q = q.filter(Transaction.status == status.upper())

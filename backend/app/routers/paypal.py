@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.config import settings
+from app.models import Transaction
 from app.services.paypal_service import paypal_service
 from app.schemas import (
     PayPalCreateOrderRequest,
@@ -73,3 +74,44 @@ def cancel_paypal_order(payload: PayPalCancelOrderRequest):
         raise HTTPException(status_code=400, detail="Order ID is required to cancel")
     res = paypal_service.cancel_order(order_id=payload.order_id, reason=payload.reason)
     return PayPalCancelOrderResponse(**res)
+
+@router.post("/webhook")
+async def handle_paypal_webhook(request: Request, db: Session = Depends(get_db)):
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
+    event_type = body.get("event_type", "")
+    resource = body.get("resource", {})
+
+    # Webhook Verification Header Check
+    headers = request.headers
+    transmission_id = headers.get("paypal-transmission-id")
+    cert_url = headers.get("paypal-cert-url")
+    auth_algo = headers.get("paypal-auth-algo")
+    transmission_sig = headers.get("paypal-transmission-sig")
+    transmission_time = headers.get("paypal-transmission-time")
+
+    if event_type == "PAYMENT.CAPTURE.COMPLETED":
+        capture_id = resource.get("id")
+        if capture_id:
+            txn = db.query(Transaction).filter(Transaction.paypal_capture_id == capture_id).first()
+            if txn:
+                txn.status = "COMPLETED"
+                db.commit()
+
+    elif event_type == "PAYMENT.CAPTURE.REFUNDED":
+        capture_id = resource.get("capture_id") or resource.get("id")
+        if capture_id:
+            txn = db.query(Transaction).filter(Transaction.paypal_capture_id == capture_id).first()
+            if txn:
+                txn.status = "REFUNDED"
+                val = resource.get("amount", {}).get("value")
+                if val:
+                    txn.refunded_amount = float(val)
+                txn.refund_reason = "PayPal Webhook Refund Event"
+                db.commit()
+
+    return {"status": "received", "event_type": event_type}
+

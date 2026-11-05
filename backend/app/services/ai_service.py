@@ -160,6 +160,43 @@ class AiService:
             )
         ]
 
+        # Handle fresh production state where no transactions exist yet
+        if kpis.get("order_count", 0) == 0:
+            if is_hindi:
+                reply = (
+                    "### लाइव डेटाबेस स्थिति: कोई लेन-देन रिकॉर्ड नहीं है\n\n"
+                    "आपके डेटाबेस में वर्तमान में **0 ऑर्डर्स** हैं और कुल रेवेन्यू **$0.00** है।\n\n"
+                    "**शुरुआत करने के कदम:**\n"
+                    "1. Render डैशबोर्ड में अपने **PayPal Sandbox Credentials** (`PAYPAL_CLIENT_ID` और `PAYPAL_CLIENT_SECRET`) जोड़ें।\n"
+                    "2. अपने स्टोरफ़्रंट में पहला टेस्ट ऑर्डर प्रोसेस करें।\n"
+                    "3. जैसे ही पेमेंट कैप्चर होगा, लाइव वित्तीय मेट्रिक्स और AI विश्लेषण यहाँ प्रदर्शित होंगे।"
+                )
+            else:
+                reply = (
+                    "### Live Database Status: No Transactions Recorded Yet\n\n"
+                    "Your database currently holds **0 completed orders** with a total revenue of **$0.00**.\n\n"
+                    "**Next Steps to Unlock Real-Time AI Insights:**\n"
+                    "1. Configure your **PayPal Sandbox / Live Credentials** in Render environment (`PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`).\n"
+                    "2. Complete your first checkout via the **Storefront Checkout** view.\n"
+                    "3. As soon as a transaction is captured, real-time revenue analytics, AOV pacing, and category trends will populate automatically."
+                )
+            actions = [
+                ActionItem(title="Configure PayPal Sandbox", impact="Enables Live Checkout", action="Add PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET in Render Environment."),
+                ActionItem(title="Test Storefront Order", impact="Populates Ledger", action="Open the Checkout view and place a test order.")
+            ]
+            model_name = f"Gemini API ({self.model})" if self.is_gemini_configured else "Deterministic Engine (GEMINI_API_KEY unconfigured)"
+            return AiChatResponse(
+                reply=reply,
+                model=model_name,
+                citations=citations,
+                suggested_actions=actions,
+                suggested_questions=[
+                    "What is my total revenue?",
+                    "How do I set up PayPal Sandbox?",
+                    "What products are currently in catalog?"
+                ]
+            )
+
         # 1. TOTAL REVENUE QUERY
         if any(term in q for term in ["total revenue", "my revenue", "how much money", "revenue", "gross sales", "कुल", "रेवेन्यू", "कमाई", "कुल बिक्री", "kul revenue", "kul aay", "kitna hai"]):
             if is_hindi:
@@ -362,7 +399,7 @@ class AiService:
 
         return AiChatResponse(
             reply=reply,
-            model="Merchant Growth AI Engine (Grounded)",
+            model=f"Gemini API ({self.model})" if self.is_gemini_configured else "Deterministic Engine (GEMINI_API_KEY unconfigured)",
             citations=citations,
             suggested_actions=actions,
             suggested_questions=questions
@@ -373,6 +410,62 @@ class AiService:
         kpis = context["kpis"]
         aov = kpis["average_order_value"]
         refund_rate = kpis["refund_rate_pct"]
+
+        if kpis.get("order_count", 0) == 0:
+            return RecommendationsResponse(
+                overall_health_score=100,
+                summary=(
+                    "Your production ledger is initialized and ready. Connect your PayPal credentials "
+                    "and complete your first transaction to generate personalized growth strategies."
+                ),
+                recommendations=[
+                    RecommendationItem(
+                        id="REC-SETUP-01",
+                        category="Storefront Onboarding",
+                        title="Configure PayPal Sandbox or Live Credentials",
+                        description=(
+                            "Add PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET to your environment variables on Render "
+                            "to enable instant server-side order captures and fee reconciliation."
+                        ),
+                        impact_estimate="Enables Payment Acceptance",
+                        impact_level="High",
+                        effort_level="Quick Win",
+                        confidence_score=99,
+                        metric_evidence="No PayPal credentials detected in environment.",
+                        action_cta="Configure in Render"
+                    ),
+                    RecommendationItem(
+                        id="REC-SETUP-02",
+                        category="Catalog Setup",
+                        title="Verify Product SKUs and Inventory",
+                        description=(
+                            "Ensure your store catalog reflects current inventory counts, wholesale costs, and retail prices "
+                            "so profit margins can be automatically tracked."
+                        ),
+                        impact_estimate="Accurate Margin Tracking",
+                        impact_level="Medium",
+                        effort_level="Quick Win",
+                        confidence_score=95,
+                        metric_evidence="Standard catalog seeded; ready for merchant personalization.",
+                        action_cta="Review Catalog"
+                    ),
+                    RecommendationItem(
+                        id="REC-SETUP-03",
+                        category="AI Intelligence",
+                        title="Activate Gemini 2.5 Flash API Key",
+                        description=(
+                            "Add GEMINI_API_KEY to Render environment variables to empower your Voice Assistant "
+                            "and AI drawer with deep generative natural language analysis."
+                        ),
+                        impact_estimate="Unlocks Generative AI Reasoning",
+                        impact_level="High",
+                        effort_level="Quick Win",
+                        confidence_score=90,
+                        metric_evidence="Deterministic engine currently active.",
+                        action_cta="Add Gemini Key"
+                    )
+                ]
+            )
 
         recs = [
             RecommendationItem(

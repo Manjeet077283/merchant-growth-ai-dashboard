@@ -212,3 +212,11 @@ class MerchantProfileSchema(BaseModel):
     paypal_email: str
 
     model_config = ConfigDict(from_attributes=True)
+
+class MerchantProfileUpdate(BaseModel):
+    business_name: Optional[str] = None
+    owner_name: Optional[str] = None
+    category: Optional[str] = None
+    currency: Optional[str] = None
+    monthly_target: Optional[float] = None
+    paypal_email: Optional[str] = None

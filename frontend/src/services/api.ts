@@ -20,9 +20,9 @@ import {
  * 3. In local development (localhost / 127.0.0.1): returns '/api' (handled by Vite dev server proxy).
  */
 export const getApiBaseUrl = (): string => {
-  const envUrl = (import.meta.env.VITE_API_BASE_URL || '').trim();
+  const envUrl = (import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/$/, '');
   if (envUrl) {
-    return envUrl.replace(/\/$/, '') + '/api';
+    return envUrl.endsWith('/api') ? envUrl : `${envUrl}/api`;
   }
 
   if (typeof window !== 'undefined') {
@@ -45,7 +45,7 @@ const API_BASE = getApiBaseUrl();
 async function fetchWithTimeout(
   url: string,
   options: RequestInit = {},
-  timeoutMs: number = 25000
+  timeoutMs: number = 30000
 ): Promise<Response> {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
@@ -57,7 +57,7 @@ async function fetchWithTimeout(
     return response;
   } catch (err: any) {
     if (err.name === 'AbortError') {
-      throw new Error(`Request timed out after ${timeoutMs / 1000}s. The backend may be spinning up from sleep (Render free tier). Please retry in a moment.`);
+      throw new Error(`Request timed out after ${timeoutMs / 1000}s. The cloud backend may be waking up from sleep (Render free tier). Please wait a moment and retry.`);
     }
     throw err;
   } finally {
@@ -71,26 +71,42 @@ export const api = {
   },
 
   async getHealth() {
-    const res = await fetchWithTimeout(`${API_BASE}/health`, {}, 30000);
+    const res = await fetchWithTimeout(`${API_BASE}/health`, {}, 35000);
     if (!res.ok) throw new Error(`Health check returned HTTP ${res.status}`);
     return res.json();
   },
 
   async getMetricsSummary(days: number = 30): Promise<DashboardMetricsResponse> {
-    const res = await fetchWithTimeout(`${API_BASE}/metrics/summary?days=${days}`, {}, 10000);
+    const res = await fetchWithTimeout(`${API_BASE}/metrics/summary?days=${days}`, {}, 30000);
     if (!res.ok) throw new Error('Failed to fetch metrics summary');
     return res.json();
   },
 
   async getMerchantProfile(): Promise<MerchantProfile> {
-    const res = await fetchWithTimeout(`${API_BASE}/metrics/profile`, {}, 8000);
+    const res = await fetchWithTimeout(`${API_BASE}/metrics/profile`, {}, 30000);
     if (!res.ok) throw new Error('Failed to fetch profile');
     return res.json();
   },
 
+  async updateMerchantProfile(profile: Partial<MerchantProfile>): Promise<MerchantProfile> {
+    const res = await fetchWithTimeout(`${API_BASE}/metrics/profile`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profile)
+    }, 30000);
+    if (!res.ok) throw new Error('Failed to update merchant profile');
+    return res.json();
+  },
+
   async resetDemoData(): Promise<{ message: string }> {
-    const res = await fetchWithTimeout(`${API_BASE}/metrics/reset-demo`, { method: 'POST' }, 10000);
+    const res = await fetchWithTimeout(`${API_BASE}/metrics/reset-demo`, { method: 'POST' }, 30000);
     if (!res.ok) throw new Error('Failed to reset demo data');
+    return res.json();
+  },
+
+  async clearDemoData(): Promise<{ message: string }> {
+    const res = await fetchWithTimeout(`${API_BASE}/metrics/clear-demo`, { method: 'POST' }, 30000);
+    if (!res.ok) throw new Error('Failed to clear demo data');
     return res.json();
   },
 
@@ -107,13 +123,13 @@ export const api = {
     if (status && status !== 'ALL') params.append('status', status);
     if (query && query.trim()) params.append('query', query.trim());
 
-    const res = await fetchWithTimeout(`${API_BASE}/transactions?${params.toString()}`, {}, 10000);
+    const res = await fetchWithTimeout(`${API_BASE}/transactions?${params.toString()}`, {}, 30000);
     if (!res.ok) throw new Error('Failed to fetch transactions');
     return res.json();
   },
 
   async getTransaction(id: string): Promise<Transaction> {
-    const res = await fetchWithTimeout(`${API_BASE}/transactions/${id}`, {}, 8000);
+    const res = await fetchWithTimeout(`${API_BASE}/transactions/${id}`, {}, 30000);
     if (!res.ok) throw new Error('Failed to fetch transaction details');
     return res.json();
   },
@@ -123,7 +139,7 @@ export const api = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reason, amount }),
-    }, 12000);
+    }, 30000);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || 'Failed to refund transaction');
@@ -132,7 +148,7 @@ export const api = {
   },
 
   async getPayPalConfig(): Promise<PayPalConfig> {
-    const res = await fetchWithTimeout(`${API_BASE}/paypal/config`, {}, 8000);
+    const res = await fetchWithTimeout(`${API_BASE}/paypal/config`, {}, 30000);
     if (!res.ok) throw new Error('Failed to fetch PayPal config');
     return res.json();
   },
@@ -151,7 +167,7 @@ export const api = {
         customer_name: customerName,
         customer_email: customerEmail,
       }),
-    }, 12000);
+    }, 30000);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || 'Failed to create PayPal order');
@@ -174,7 +190,7 @@ export const api = {
         customer_name: customerName,
         customer_email: customerEmail,
       }),
-    }, 15000);
+    }, 30000);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || 'Failed to capture PayPal order');
@@ -187,7 +203,7 @@ export const api = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message, history }),
-    }, 15000);
+    }, 30000);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || 'Failed to get AI response');
@@ -196,13 +212,13 @@ export const api = {
   },
 
   async getRecommendations(): Promise<RecommendationsResponse> {
-    const res = await fetchWithTimeout(`${API_BASE}/ai/recommendations`, {}, 10000);
+    const res = await fetchWithTimeout(`${API_BASE}/ai/recommendations`, {}, 30000);
     if (!res.ok) throw new Error('Failed to fetch recommendations');
     return res.json();
   },
 
   async getProducts(): Promise<Product[]> {
-    const res = await fetchWithTimeout(`${API_BASE}/ai/products`, {}, 8000);
+    const res = await fetchWithTimeout(`${API_BASE}/ai/products`, {}, 30000);
     if (!res.ok) throw new Error('Failed to fetch products');
     return res.json();
   },

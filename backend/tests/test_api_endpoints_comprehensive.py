@@ -3,7 +3,7 @@ from fastapi import HTTPException
 from app.database import SessionLocal, Base, engine
 from app.seed_data import seed_database
 from app.routers.health import get_health
-from app.routers.metrics import get_metrics_summary, get_profile
+from app.routers.metrics import get_metrics_summary, get_profile, update_profile, clear_demo_data, reset_demo_data
 from app.routers.transactions import list_transactions, get_transaction, refund_transaction
 from app.routers.paypal import get_paypal_config, create_paypal_order, capture_paypal_order, cancel_paypal_order
 from app.routers.ai_agent import chat_with_agent, get_recommendations
@@ -13,7 +13,8 @@ from app.schemas import (
     PayPalCancelOrderRequest,
     RefundRequest,
     OrderItemSchema,
-    AiChatRequest
+    AiChatRequest,
+    MerchantProfileUpdate
 )
 
 @pytest.fixture(scope="module", autouse=True)
@@ -221,3 +222,38 @@ def test_growth_recommendations_structure():
         assert "Payment Conversion" in categories
     finally:
         db.close()
+
+def test_merchant_profile_update():
+    db = SessionLocal()
+    try:
+        updated = update_profile(
+            payload=MerchantProfileUpdate(
+                business_name="Green Bean Roastery",
+                owner_name="Sarah Miller",
+                monthly_target=35000.0
+            ),
+            db=db
+        )
+        assert updated.business_name == "Green Bean Roastery"
+        assert updated.owner_name == "Sarah Miller"
+        assert updated.monthly_target == 35000.0
+
+        # Verify persistence
+        fetched = get_profile(db=db)
+        assert fetched.business_name == "Green Bean Roastery"
+    finally:
+        db.close()
+
+def test_clear_demo_and_reset():
+    db = SessionLocal()
+    try:
+        # Clear demo transactions
+        clear_res = clear_demo_data(db=db)
+        assert "Purged" in clear_res["message"]
+
+        # Now re-populate demo transactions
+        reset_res = reset_demo_data(db=db)
+        assert "successfully reset" in reset_res["message"]
+    finally:
+        db.close()
+

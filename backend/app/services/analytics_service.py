@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List
 from collections import defaultdict
 from sqlalchemy.orm import Session
+from app.config import settings
 from app.models import Transaction, Product, MerchantProfile
 from app.schemas import (
     KpiSummary,
@@ -18,11 +19,15 @@ def get_dashboard_metrics(db: Session, days: int = 30) -> DashboardMetricsRespon
     current_cutoff = now - timedelta(days=days)
     prior_cutoff = now - timedelta(days=days * 2)
 
-    current_txns = db.query(Transaction).filter(
+    base_query = db.query(Transaction)
+    if not settings.DEMO_MODE:
+        base_query = base_query.filter(Transaction.is_demo == False)
+
+    current_txns = base_query.filter(
         Transaction.created_at >= current_cutoff
     ).order_by(Transaction.created_at.desc()).all()
 
-    prior_txns = db.query(Transaction).filter(
+    prior_txns = base_query.filter(
         Transaction.created_at >= prior_cutoff,
         Transaction.created_at < current_cutoff
     ).all()
@@ -202,7 +207,13 @@ def get_grounded_business_context(db: Session) -> Dict[str, Any]:
     metrics = get_dashboard_metrics(db, days=30)
     profile = db.query(MerchantProfile).first()
 
-    all_completed = db.query(Transaction).filter(Transaction.status == "COMPLETED").all()
+    all_completed_query = db.query(Transaction).filter(Transaction.status == "COMPLETED")
+    refunds_query = db.query(Transaction).filter(Transaction.status == "REFUNDED")
+    if not settings.DEMO_MODE:
+        all_completed_query = all_completed_query.filter(Transaction.is_demo == False)
+        refunds_query = refunds_query.filter(Transaction.is_demo == False)
+
+    all_completed = all_completed_query.all()
     product_stats = defaultdict(lambda: {"qty": 0, "rev": 0.0})
     for t in all_completed:
         for item in t.items:
@@ -213,7 +224,7 @@ def get_grounded_business_context(db: Session) -> Dict[str, Any]:
             product_stats[item.get("name", sku)]["rev"] += rev
 
     top_products = sorted(product_stats.items(), key=lambda x: x[1]["rev"], reverse=True)[:5]
-    refunds = db.query(Transaction).filter(Transaction.status == "REFUNDED").all()
+    refunds = refunds_query.all()
     refund_reasons = [t.refund_reason for t in refunds if t.refund_reason]
 
     peak_hours = sorted(metrics.hourly_trends, key=lambda x: x.orders_count, reverse=True)[:3]

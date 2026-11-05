@@ -287,7 +287,7 @@ export const StorefrontDemo: React.FC<StorefrontDemoProps> = ({
             )}
 
             {/* PayPal Checkout CTA */}
-            <div className="pt-2">
+            <div className="pt-2 space-y-2">
               <button
                 onClick={handlePayPalCheckout}
                 disabled={cart.length === 0 || isProcessing}
@@ -296,15 +296,24 @@ export const StorefrontDemo: React.FC<StorefrontDemoProps> = ({
                 {isProcessing ? (
                   <div className="flex items-center gap-2">
                     <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>Capturing Payment...</span>
+                    <span>Capturing Payment Server-Side...</span>
                   </div>
                 ) : (
                   <>
                     <ShieldCheck className="w-4 h-4" />
-                    <span>Pay with PayPal Sandbox (${cartSubtotal.toFixed(2)})</span>
+                    <span>
+                      Pay with PayPal {payPalConfig?.client_id_configured ? (payPalConfig.mode === 'live' ? 'Live' : 'Sandbox') : 'Sandbox'}{' '}
+                      (${cartSubtotal.toFixed(2)})
+                    </span>
                   </>
                 )}
               </button>
+
+              {!payPalConfig?.client_id_configured && (
+                <p className="text-[10px] text-center text-slate-400">
+                  Running on zero-setup sandbox simulator. To accept live cards &amp; PayPal accounts, add <code>PAYPAL_CLIENT_ID</code> in Render.
+                </p>
+              )}
             </div>
           </div>
         </div>

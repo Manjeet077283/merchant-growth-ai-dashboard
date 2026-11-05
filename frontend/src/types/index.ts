@@ -156,3 +156,17 @@ export interface MerchantProfile {
   monthly_target: number;
   paypal_email: string;
 }
+
+export interface HealthResponse {
+  status: string;
+  app: string;
+  version: string;
+  environment: string;
+  demo_mode: boolean;
+  database_type?: string;
+  paypal_configured: boolean;
+  paypal_mode: string;
+  gemini_configured: boolean;
+  gemini_model: string;
+}
+

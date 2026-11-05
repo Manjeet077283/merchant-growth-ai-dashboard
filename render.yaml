@@ -10,7 +10,7 @@ services:
     env: python
     plan: free
     region: oregon
-    buildCommand: "pip install -r requirements.txt"
+    buildCommand: "npm --prefix frontend install && npm --prefix frontend run build && pip install -r requirements.txt"
     startCommand: "python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT --app-dir backend"
     healthCheckPath: /api/health
     envVars:
@@ -19,7 +19,7 @@ services:
       - key: ENVIRONMENT
         value: production
       - key: DEMO_MODE
-        value: "true"
+        value: "false"
       - key: DATABASE_URL
         value: sqlite:///./merchant_growth.db
       - key: PAYPAL_MODE

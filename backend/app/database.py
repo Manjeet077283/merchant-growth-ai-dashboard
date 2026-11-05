@@ -15,11 +15,20 @@ if db_url.startswith("sqlite:///"):
         except Exception:
             pass
 
-engine = create_engine(
-    db_url,
-    connect_args={"check_same_thread": False} if db_url.startswith("sqlite") else {},
-    echo=False
-)
+engine_args = {
+    "echo": False
+}
+
+if db_url.startswith("sqlite"):
+    engine_args["connect_args"] = {"check_same_thread": False}
+else:
+    # PostgreSQL production pooling settings
+    engine_args["pool_pre_ping"] = True
+    engine_args["pool_recycle"] = 300
+    engine_args["pool_size"] = 10
+    engine_args["max_overflow"] = 20
+
+engine = create_engine(db_url, **engine_args)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()

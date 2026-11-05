@@ -13,6 +13,7 @@ def get_health():
         "version": settings.VERSION,
         "environment": settings.ENVIRONMENT,
         "demo_mode": settings.DEMO_MODE,
+        "database_type": settings.database_type,
         "paypal_configured": paypal_service.is_configured,
         "paypal_mode": settings.PAYPAL_MODE,
         "gemini_configured": ai_service.is_gemini_configured,

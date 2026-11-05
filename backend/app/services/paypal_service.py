@@ -127,8 +127,15 @@ class PayPalService:
                             "amount": subtotal,
                             "is_live_sandbox": True
                         }
-            except Exception:
-                pass
+            except Exception as e:
+                if not settings.DEMO_MODE:
+                    raise ValueError(f"Failed to communicate with PayPal REST API: {str(e)}")
+
+        if not self.is_configured and not settings.DEMO_MODE:
+            raise ValueError(
+                "PayPal integration is not configured. Please set PAYPAL_CLIENT_ID and "
+                "PAYPAL_CLIENT_SECRET in your Render environment variables to create orders."
+            )
 
         simulated_order_id = f"ORDER-SANDBOX-{int(time.time())}-{random.randint(1000, 9999)}"
         self._pending_orders[simulated_order_id] = {
@@ -220,6 +227,22 @@ class PayPalService:
             email = customer_email or payer.get("email_address", "sandbox-buyer@example.com")
             net = round(amount - fee, 2)
         else:
+            if not self.is_configured and not settings.DEMO_MODE:
+                return {
+                    "success": False,
+                    "status": "NOT_CONFIGURED",
+                    "transaction_id": "",
+                    "capture_id": "",
+                    "order_id": order_id,
+                    "amount": 0.0,
+                    "fee": 0.0,
+                    "net": 0.0,
+                    "currency": "USD",
+                    "customer_name": customer_name or "",
+                    "customer_email": customer_email or "",
+                    "message": "PayPal integration is not configured. Add PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET in Render environment to capture payments."
+                }
+
             pending = self._pending_orders.get(order_id)
             if pending:
                 amount = pending["amount"]
@@ -244,6 +267,7 @@ class PayPalService:
             capture_id = f"CAP-SANDBOX-{int(time.time())}-{random.randint(100, 999)}"
 
         txn_id = f"TXN-PP-{int(time.time())}-{random.randint(10, 99)}"
+        is_real_payment = bool(self.is_configured and captured_data)
         new_txn = Transaction(
             transaction_id=txn_id,
             paypal_order_id=order_id,
@@ -255,11 +279,11 @@ class PayPalService:
             status="COMPLETED",
             fee=fee,
             net_amount=net,
-            payment_method="PAYPAL_SANDBOX",
+            payment_method="PAYPAL_LIVE" if (self.is_configured and settings.PAYPAL_MODE == "live") else "PAYPAL_SANDBOX",
             items_json=str(items or [{"name": "Merchant Purchase", "qty": 1, "unit_price": amount}]).replace("'", '"'),
             refunded_amount=0.0,
             refund_reason=None,
-            is_demo=False
+            is_demo=not is_real_payment
         )
         db.add(new_txn)
         db.commit()

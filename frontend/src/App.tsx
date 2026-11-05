@@ -7,6 +7,7 @@ import {
   PayPalConfig,
   RecommendationsResponse,
   MerchantProfile,
+  HealthResponse,
   ActionItem,
   RecommendationItem
 } from './types';
@@ -53,6 +54,7 @@ export const App: React.FC = () => {
   const [merchantProfile, setMerchantProfile] = useState<MerchantProfile | undefined>(undefined);
   const [payPalConfig, setPayPalConfig] = useState<PayPalConfig | undefined>(undefined);
   const [geminiConfigured, setGeminiConfigured] = useState<boolean>(false);
+  const [healthData, setHealthData] = useState<HealthResponse | null>(null);
 
   // Transactions State
   const [transactionsData, setTransactionsData] = useState<TransactionListResponse | null>(null);
@@ -71,12 +73,12 @@ export const App: React.FC = () => {
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Fetch all core dashboard datasets
+  // Fetch all core dashboard datasets with multi-endpoint resilience
   const fetchDashboardData = useCallback(async (days = 30) => {
     setIsRefreshing(true);
     setErrorMessage(null);
     try {
-      const [health, metricsData, recsData, profileData, ppConfig] = await Promise.all([
+      const results = await Promise.allSettled([
         api.getHealth(),
         api.getMetricsSummary(days),
         api.getRecommendations(),
@@ -84,11 +86,30 @@ export const App: React.FC = () => {
         api.getPayPalConfig(),
       ]);
 
-      setGeminiConfigured(health.gemini_configured);
-      setMetrics(metricsData);
-      setRecommendations(recsData);
-      setMerchantProfile(profileData);
-      setPayPalConfig(ppConfig);
+      const [healthRes, metricsRes, recsRes, profileRes, ppConfigRes] = results;
+
+      if (healthRes.status === 'fulfilled') {
+        setHealthData(healthRes.value);
+        setGeminiConfigured(healthRes.value.gemini_configured);
+      }
+      if (metricsRes.status === 'fulfilled') {
+        setMetrics(metricsRes.value);
+      }
+      if (recsRes.status === 'fulfilled') {
+        setRecommendations(recsRes.value);
+      }
+      if (profileRes.status === 'fulfilled') {
+        setMerchantProfile(profileRes.value);
+      }
+      if (ppConfigRes.status === 'fulfilled') {
+        setPayPalConfig(ppConfigRes.value);
+      }
+
+      // If every endpoint failed, display connection error banner
+      if (results.every((r) => r.status === 'rejected')) {
+        const firstErr = (results[0] as PromiseRejectedResult).reason;
+        setErrorMessage(firstErr?.message || 'Failed to connect to backend service');
+      }
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to connect to backend service');
     } finally {
@@ -134,6 +155,21 @@ export const App: React.FC = () => {
     ]);
   };
 
+  // Handle Demo Clear (switch to genuine production ledger)
+  const handleClearDemo = async () => {
+    await api.clearDemoData();
+    await Promise.all([
+      fetchDashboardData(analyticsDays),
+      fetchTransactions(1, 'ALL', ''),
+    ]);
+  };
+
+  // Handle Merchant Profile Update
+  const handleUpdateProfile = async (updated: Partial<MerchantProfile>) => {
+    const res = await api.updateMerchantProfile(updated);
+    setMerchantProfile(res);
+  };
+
   // Handle newly captured checkout order
   const handleOrderCompleted = async () => {
     await Promise.all([
@@ -161,6 +197,8 @@ export const App: React.FC = () => {
           businessName={merchantProfile?.business_name || 'Artisan Coffee Roasters & Co.'}
           ownerName={merchantProfile?.owner_name?.split(' ')[0] || 'Alex'}
           payPalConfig={payPalConfig}
+          isDemoMode={healthData?.demo_mode ?? true}
+          environment={healthData?.environment ?? 'development'}
           onRefresh={() => fetchDashboardData(analyticsDays)}
           onResetDemo={handleResetDemo}
           onOpenStore={() => setIsStoreModalOpen(true)}
@@ -197,6 +235,29 @@ export const App: React.FC = () => {
               {/* TAB 1: MINIMAL & CLEAN DASHBOARD (Inspired by Image 2) */}
               {currentTab === 'dashboard' && metrics && (
                 <div className="space-y-7">
+                  {/* Zero-Transaction Authentic Production Notice */}
+                  {metrics.kpis.order_count === 0 && (
+                    <div className="bg-white rounded-3xl border border-blue-100 p-6 shadow-[0_4px_25px_rgba(23,43,77,0.03)] flex flex-col sm:flex-row items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-2xl bg-[#EAF3FC] text-[#0070E0] flex items-center justify-center shrink-0">
+                          <ShoppingBag className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-sm text-[#172B4D]">Authentic Production Ledger Ready</h4>
+                          <p className="text-xs text-slate-500">
+                            Your database currently has 0 transactions recorded. Complete a checkout in the store or connect your PayPal Sandbox credentials to see real-time revenue analytics.
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setIsStoreModalOpen(true)}
+                        className="px-4 py-2 bg-[#0070E0] hover:bg-[#005bb8] text-white text-xs font-bold rounded-xl shrink-0 shadow-2xs cursor-pointer"
+                      >
+                        Open Store Checkout
+                      </button>
+                    </div>
+                  )}
+
                   {/* Row 1: 4 Prominent KPI Cards (Strictly Inspired by Image 4) */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
                     <KpiCard
@@ -492,7 +553,10 @@ export const App: React.FC = () => {
                   payPalConfig={payPalConfig}
                   merchantProfile={merchantProfile}
                   geminiConfigured={geminiConfigured}
+                  healthData={healthData || undefined}
                   onResetDemo={handleResetDemo}
+                  onClearDemo={handleClearDemo}
+                  onUpdateProfile={handleUpdateProfile}
                 />
               )}
             </>

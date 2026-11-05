@@ -1,13 +1,42 @@
 import os
+import time
+from collections import defaultdict
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 from app.config import settings
 from app.database import engine, Base, SessionLocal
 from app.seed_data import seed_database
 from app.routers import health, metrics, transactions, paypal, ai_agent
+
+# Simple sliding window rate limiter: max 60 requests/minute on sensitive routes
+rate_limit_records = defaultdict(list)
+
+class SecurityAndRateLimitMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        client_ip = request.client.host if request.client else "unknown"
+        path = request.url.path
+
+        if path in ("/api/ai/chat", "/api/paypal/create-order"):
+            now = time.time()
+            cutoff = now - 60.0
+            rate_limit_records[client_ip] = [t for t in rate_limit_records[client_ip] if t > cutoff]
+            if len(rate_limit_records[client_ip]) >= 60:
+                return JSONResponse(
+                    status_code=429,
+                    content={"detail": "Too many requests. Please wait a minute before retrying."}
+                )
+            rate_limit_records[client_ip].append(now)
+
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        return response
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -27,6 +56,9 @@ app = FastAPI(
     description="Merchant Growth AI: Intelligent Business Agent for Small Merchants using PayPal Sandbox & AI",
     lifespan=lifespan
 )
+
+# Attach Security and Rate Limiting Middleware
+app.add_middleware(SecurityAndRateLimitMiddleware)
 
 # CORS Middleware with explicit trusted origins, wildcard-safe credentials, and Render domain regex
 app.add_middleware(

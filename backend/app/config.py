@@ -4,19 +4,39 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+def _get_demo_mode() -> bool:
+    env = os.getenv("ENVIRONMENT", "development").lower()
+    raw_demo = os.getenv("DEMO_MODE")
+    if raw_demo is not None:
+        return raw_demo.lower() in ("true", "1", "yes")
+    # In production, default DEMO_MODE to False unless explicitly requested
+    return False if env == "production" else True
+
+def _get_database_url() -> str:
+    url = os.getenv("DATABASE_URL", "sqlite:///./merchant_growth.db")
+    # SQLAlchemy 2.0 requires postgresql:// instead of legacy postgres://
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql://", 1)
+    return url
+
 class Settings(BaseModel):
     PROJECT_NAME: str = "Merchant Growth AI — Intelligent Business Agent"
     VERSION: str = "1.0.0"
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
-    DEMO_MODE: bool = os.getenv("DEMO_MODE", "true").lower() in ("true", "1", "yes")
+    DEMO_MODE: bool = _get_demo_mode()
 
     # Database
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./merchant_growth.db")
+    DATABASE_URL: str = _get_database_url()
 
-    # PayPal REST API Sandbox
+    @property
+    def database_type(self) -> str:
+        return "PostgreSQL" if "postgres" in self.DATABASE_URL.lower() else "SQLite"
+
+    # PayPal REST API Sandbox / Live
     PAYPAL_CLIENT_ID: str = os.getenv("PAYPAL_CLIENT_ID", "")
     PAYPAL_CLIENT_SECRET: str = os.getenv("PAYPAL_CLIENT_SECRET", "")
     PAYPAL_MODE: str = os.getenv("PAYPAL_MODE", "sandbox")
+    PAYPAL_WEBHOOK_ID: str = os.getenv("PAYPAL_WEBHOOK_ID", "")
     PAYPAL_API_BASE: str = (
         "https://api-m.sandbox.paypal.com"
         if os.getenv("PAYPAL_MODE", "sandbox") == "sandbox"
@@ -50,3 +70,4 @@ class Settings(BaseModel):
         return origins
 
 settings = Settings()
+

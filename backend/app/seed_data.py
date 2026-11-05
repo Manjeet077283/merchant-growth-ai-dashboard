@@ -143,7 +143,9 @@ def seed_database(db: Session, force_reset: bool = False):
             db.add(product)
         db.commit()
 
-    if db.query(Transaction).count() == 0:
+    from app.config import settings
+    # Only populate synthetic demo transactions if DEMO_MODE is active or explicitly force-reset
+    if (settings.DEMO_MODE or force_reset) and db.query(Transaction).count() == 0:
         now = datetime.now(timezone.utc)
         random.seed(42)
 
@@ -233,3 +235,10 @@ def seed_database(db: Session, force_reset: bool = False):
 
         db.add_all(transactions)
         db.commit()
+
+def clear_demo_transactions(db: Session) -> int:
+    """Purges all synthetic demo transactions, leaving genuine customer transactions intact."""
+    deleted = db.query(Transaction).filter(Transaction.is_demo == True).delete()
+    db.commit()
+    return deleted
+
