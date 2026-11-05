@@ -8,16 +8,24 @@ import {
   Trash2,
   ShieldCheck,
   CheckCircle2,
-  CreditCard,
   X,
-  Sparkles,
-  ArrowRight
+  ExternalLink,
+  AlertCircle,
+  RefreshCw
 } from 'lucide-react';
 
 interface StorefrontDemoProps {
   onOrderCompleted: () => void;
   payPalConfig?: PayPalConfig;
   onClose?: () => void;
+}
+
+interface PendingPayPalOrder {
+  order_id: string;
+  status: string;
+  approval_url?: string;
+  amount: number;
+  currency: string;
 }
 
 export const StorefrontDemo: React.FC<StorefrontDemoProps> = ({
@@ -30,6 +38,8 @@ export const StorefrontDemo: React.FC<StorefrontDemoProps> = ({
   const [customerName, setCustomerName] = useState('Sarah Jenkins');
   const [customerEmail, setCustomerEmail] = useState('sarah.jenkins@sandbox.demo');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [pendingOrder, setPendingOrder] = useState<PendingPayPalOrder | null>(null);
   const [successDetails, setSuccessDetails] = useState<any | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -37,9 +47,9 @@ export const StorefrontDemo: React.FC<StorefrontDemoProps> = ({
     api.getProducts().then((prods) => {
       setProducts(prods);
       if (prods.length > 0 && cart.length === 0) {
-        setCart([{ product: prods[0], qty: 2 }]);
+        setCart([{ product: prods[0], qty: 1 }]);
       }
-    });
+    }).catch(() => {});
   }, []);
 
   const addToCart = (product: Product) => {
@@ -76,9 +86,73 @@ export const StorefrontDemo: React.FC<StorefrontDemoProps> = ({
   const estimatedFee = Math.round((cartSubtotal * 0.029 + 0.3) * 100) / 100;
   const estimatedNet = Math.max(0, Math.round((cartSubtotal - estimatedFee) * 100) / 100);
 
-  const handlePayPalCheckout = async () => {
+  // Step 1: Create Order in PayPal Sandbox
+  const handleInitiateOrder = async () => {
     if (cart.length === 0) return;
+    setErrorMessage(null);
+
+    // Validate customer inputs
+    const trimmedName = customerName.trim();
+    const trimmedEmail = customerEmail.trim();
+    if (!trimmedName || trimmedName.length < 2) {
+      setErrorMessage('Please provide a valid customer name.');
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!trimmedEmail || !emailRegex.test(trimmedEmail)) {
+      setErrorMessage('Please provide a valid customer email address.');
+      return;
+    }
+
+    if (!payPalConfig?.client_id_configured) {
+      setErrorMessage(
+        'PayPal Sandbox credentials are required to initiate checkout. ' +
+        'Please configure PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET in your Render Environment settings.'
+      );
+      return;
+    }
+
     setIsProcessing(true);
+
+    try {
+      const orderItems: OrderItem[] = cart.map((item) => ({
+        sku: item.product.sku,
+        name: item.product.name,
+        qty: item.qty,
+        unit_price: item.product.price,
+        category: item.product.category,
+      }));
+
+      // Server-side order creation via PayPal Sandbox REST API
+      const created = await api.createPayPalOrder(
+        orderItems,
+        trimmedName,
+        trimmedEmail
+      );
+
+      setPendingOrder({
+        order_id: created.order_id,
+        status: created.status,
+        approval_url: created.approval_url,
+        amount: created.amount,
+        currency: created.currency,
+      });
+
+      // Auto-open PayPal Sandbox approval window if URL available
+      if (created.approval_url) {
+        window.open(created.approval_url, '_blank', 'noopener,noreferrer');
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to initiate PayPal Sandbox order.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Step 2: Capture Approved Order in PayPal Sandbox
+  const handleCaptureOrder = async () => {
+    if (!pendingOrder) return;
+    setIsCapturing(true);
     setErrorMessage(null);
 
     try {
@@ -90,28 +164,38 @@ export const StorefrontDemo: React.FC<StorefrontDemoProps> = ({
         category: item.product.category,
       }));
 
-      // 1. Server-side order creation via PayPal Sandbox REST API
-      const createdOrder = await api.createPayPalOrder(
+      const captured = await api.capturePayPalOrder(
+        pendingOrder.order_id,
         orderItems,
-        customerName,
-        customerEmail
+        customerName.trim(),
+        customerEmail.trim()
       );
 
-      // 2. Server-side payment capture & SQLite commitment
-      const capturedPayment = await api.capturePayPalOrder(
-        createdOrder.order_id,
-        orderItems,
-        customerName,
-        customerEmail
-      );
-
-      setSuccessDetails(capturedPayment);
-      setCart([]);
-      onOrderCompleted();
+      if (captured.status === 'COMPLETED' || captured.success) {
+        setSuccessDetails(captured);
+        setPendingOrder(null);
+        setCart([]); // Clear cart only after confirmed capture
+        onOrderCompleted(); // Refresh dashboard KPIs
+      } else {
+        setErrorMessage(captured.message || 'PayPal capture failed or is still awaiting buyer approval.');
+      }
     } catch (err: any) {
-      setErrorMessage(err.message || 'Payment capture failed. Check server connection.');
+      setErrorMessage(err.message || 'Payment capture failed. Verify buyer approval on PayPal Sandbox.');
     } finally {
-      setIsProcessing(false);
+      setIsCapturing(false);
+    }
+  };
+
+  // Step 3: Cancel Pending Order
+  const handleCancelOrder = async () => {
+    if (!pendingOrder) return;
+    try {
+      await api.cancelPayPalOrder(pendingOrder.order_id, 'Buyer cancelled checkout');
+    } catch {
+      // Ignored
+    } finally {
+      setPendingOrder(null);
+      setErrorMessage(null);
     }
   };
 
@@ -127,7 +211,7 @@ export const StorefrontDemo: React.FC<StorefrontDemoProps> = ({
             </span>
           </div>
           <p className="text-xs text-slate-400 mt-0.5">
-            Test real server-side payment capture and see immediate updates in your dashboard.
+            Test authentic server-side payment capture and see immediate updates in your dashboard.
           </p>
         </div>
 
@@ -160,16 +244,22 @@ export const StorefrontDemo: React.FC<StorefrontDemoProps> = ({
                     {prod.category}
                   </span>
                 </div>
-                <div className="p-4 flex-1 flex flex-col justify-between">
+
+                <div className="p-4 space-y-3 flex-1 flex flex-col justify-between">
                   <div>
-                    <h4 className="font-bold text-sm text-[#172B4D] mb-1 leading-snug">{prod.name}</h4>
-                    <p className="text-xs text-slate-500 line-clamp-2 mb-3">{prod.description}</p>
+                    <h3 className="font-bold text-sm text-[#172B4D] line-clamp-1">{prod.name}</h3>
+                    <p className="text-xs text-slate-400 mt-1 line-clamp-2 leading-relaxed">
+                      {prod.description}
+                    </p>
                   </div>
-                  <div className="flex items-center justify-between pt-3 border-t border-slate-50">
-                    <span className="text-base font-extrabold text-[#172B4D]">${prod.price.toFixed(2)}</span>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-50">
+                    <span className="text-base font-extrabold text-[#172B4D]">
+                      ${prod.price.toFixed(2)}
+                    </span>
                     <button
                       onClick={() => addToCart(prod)}
-                      className="px-3.5 py-1.5 bg-[#EAF3FC] hover:bg-[#0070E0] text-[#0070E0] hover:text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
+                      className="px-3.5 py-1.5 bg-[#EAF3FC] hover:bg-[#0070E0] text-[#0070E0] hover:text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       Add to Cart
@@ -181,22 +271,22 @@ export const StorefrontDemo: React.FC<StorefrontDemoProps> = ({
           </div>
         </div>
 
-        {/* Shopping Cart & PayPal Checkout Card */}
-        <div className="space-y-4">
-          <div className="bg-white rounded-3xl border border-slate-100 p-6 shadow-[0_4px_25px_rgba(23,43,77,0.04)] space-y-4 sticky top-6">
+        {/* Right Checkout Cart */}
+        <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-[0_4px_20px_rgba(23,43,77,0.03)] flex flex-col justify-between space-y-4 h-fit">
+          <div className="space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-50">
               <div className="flex items-center gap-2">
                 <ShoppingBag className="w-4 h-4 text-[#0070E0]" />
-                <h3 className="font-bold text-sm text-[#172B4D]">Checkout Cart</h3>
+                <span className="font-bold text-sm text-[#172B4D]">Checkout Cart</span>
               </div>
-              <span className="text-xs font-bold text-slate-400">
+              <span className="text-xs text-slate-400 font-medium">
                 {cart.reduce((s, i) => s + i.qty, 0)} items
               </span>
             </div>
 
-            {/* Cart Items */}
+            {/* Cart Items List */}
             {cart.length === 0 ? (
-              <div className="py-8 text-center text-xs text-slate-400">
+              <div className="text-center py-8 text-xs text-slate-400">
                 Your cart is empty. Pick items from the catalog.
               </div>
             ) : (
@@ -215,20 +305,23 @@ export const StorefrontDemo: React.FC<StorefrontDemoProps> = ({
                     <div className="flex items-center gap-1.5 shrink-0">
                       <button
                         onClick={() => updateQty(item.product.id, -1)}
-                        className="p-1 rounded bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
+                        disabled={Boolean(pendingOrder)}
+                        className="p-1 rounded bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-50"
                       >
                         <Minus className="w-3 h-3" />
                       </button>
                       <span className="w-4 text-center font-bold text-[#172B4D]">{item.qty}</span>
                       <button
                         onClick={() => updateQty(item.product.id, 1)}
-                        className="p-1 rounded bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
+                        disabled={Boolean(pendingOrder)}
+                        className="p-1 rounded bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-50"
                       >
                         <Plus className="w-3 h-3" />
                       </button>
                       <button
                         onClick={() => removeFromCart(item.product.id)}
-                        className="p-1 text-slate-400 hover:text-rose-600 ml-1"
+                        disabled={Boolean(pendingOrder)}
+                        className="p-1 text-slate-400 hover:text-rose-600 ml-1 disabled:opacity-50"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -247,8 +340,9 @@ export const StorefrontDemo: React.FC<StorefrontDemoProps> = ({
                 <input
                   type="text"
                   value={customerName}
+                  disabled={Boolean(pendingOrder)}
                   onChange={(e) => setCustomerName(e.target.value)}
-                  className="w-full text-xs px-3.5 py-2 bg-[#F5F7FA] border border-slate-200/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0070E0]"
+                  className="w-full text-xs px-3.5 py-2 bg-[#F5F7FA] border border-slate-200/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0070E0] disabled:opacity-60"
                 />
               </div>
               <div>
@@ -258,8 +352,9 @@ export const StorefrontDemo: React.FC<StorefrontDemoProps> = ({
                 <input
                   type="email"
                   value={customerEmail}
+                  disabled={Boolean(pendingOrder)}
                   onChange={(e) => setCustomerEmail(e.target.value)}
-                  className="w-full text-xs px-3.5 py-2 bg-[#F5F7FA] border border-slate-200/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0070E0]"
+                  className="w-full text-xs px-3.5 py-2 bg-[#F5F7FA] border border-slate-200/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0070E0] disabled:opacity-60"
                 />
               </div>
             </div>
@@ -275,46 +370,108 @@ export const StorefrontDemo: React.FC<StorefrontDemoProps> = ({
                 <span>-${estimatedFee.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-emerald-600 font-bold pt-1.5 border-t border-dashed border-slate-200">
-                <span>Net Recorded to Ledger</span>
+                <div>
+                  <span>Est. Net Payout</span>
+                  <p className="text-[10px] text-slate-400 font-normal">Final fee &amp; net recorded upon PayPal capture</p>
+                </div>
                 <span>${estimatedNet.toFixed(2)}</span>
               </div>
             </div>
 
+            {/* Error Message Box */}
             {errorMessage && (
-              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs">
-                {errorMessage}
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <span className="leading-relaxed">{errorMessage}</span>
               </div>
             )}
 
-            {/* PayPal Checkout CTA */}
-            <div className="pt-2 space-y-2">
-              <button
-                onClick={handlePayPalCheckout}
-                disabled={cart.length === 0 || isProcessing}
-                className="w-full py-3.5 px-4 rounded-2xl bg-[#0070E0] hover:bg-[#005bb8] active:scale-[0.99] text-white font-extrabold text-sm shadow-[0_4px_16px_rgba(0,112,224,0.3)] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-              >
-                {isProcessing ? (
-                  <div className="flex items-center gap-2">
-                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>Capturing Payment Server-Side...</span>
-                  </div>
-                ) : (
-                  <>
-                    <ShieldCheck className="w-4 h-4" />
-                    <span>
-                      Pay with PayPal {payPalConfig?.client_id_configured ? (payPalConfig.mode === 'live' ? 'Live' : 'Sandbox') : 'Sandbox'}{' '}
-                      (${cartSubtotal.toFixed(2)})
-                    </span>
-                  </>
-                )}
-              </button>
+            {/* PayPal Configuration Warning if Missing */}
+            {!payPalConfig?.client_id_configured && (
+              <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-[#003087] text-[11px] leading-relaxed">
+                <strong>Credentials Required:</strong> Enter <code>PAYPAL_CLIENT_ID</code> and <code>PAYPAL_CLIENT_SECRET</code> in Render Environment to process live sandbox checkout.
+              </div>
+            )}
 
-              {!payPalConfig?.client_id_configured && (
-                <p className="text-[10px] text-center text-slate-400">
-                  Running on zero-setup sandbox simulator. To accept live cards &amp; PayPal accounts, add <code>PAYPAL_CLIENT_ID</code> in Render.
+            {/* Multi-Step Checkout Action Area */}
+            {pendingOrder ? (
+              /* Step 2: Awaiting Approval & Capture Action Box */
+              <div className="p-4 rounded-2xl bg-[#EAF3FC] border border-blue-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-[#003087]">Order Created: #{pendingOrder.order_id.slice(-8)}</span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-[#0070E0]">
+                    Awaiting Approval
+                  </span>
+                </div>
+
+                <p className="text-[11px] text-slate-600 leading-relaxed">
+                  Log in with your <strong>PayPal Sandbox Buyer account</strong> to approve payment of <strong>${pendingOrder.amount.toFixed(2)}</strong>.
                 </p>
-              )}
-            </div>
+
+                {pendingOrder.approval_url && (
+                  <a
+                    href={pendingOrder.approval_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full py-2 px-3 rounded-xl bg-white hover:bg-slate-50 border border-blue-300 text-[#0070E0] font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition-all"
+                  >
+                    <span>Open PayPal Sandbox Window</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                )}
+
+                <div className="pt-1 flex gap-2">
+                  <button
+                    onClick={handleCaptureOrder}
+                    disabled={isCapturing}
+                    className="flex-1 py-2.5 px-3 rounded-xl bg-[#0070E0] hover:bg-[#005bb8] text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-all disabled:opacity-50 cursor-pointer"
+                  >
+                    {isCapturing ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Verifying &amp; Capturing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        <span>Complete &amp; Capture</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    onClick={handleCancelOrder}
+                    disabled={isCapturing}
+                    className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs transition-all disabled:opacity-50 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* Step 1: Initiate Order Button */
+              <div className="pt-2 space-y-2">
+                <button
+                  onClick={handleInitiateOrder}
+                  disabled={cart.length === 0 || isProcessing || !payPalConfig?.client_id_configured}
+                  className="w-full py-3.5 px-4 rounded-2xl bg-[#0070E0] hover:bg-[#005bb8] active:scale-[0.99] text-white font-extrabold text-sm shadow-[0_4px_16px_rgba(0,112,224,0.3)] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  {isProcessing ? (
+                    <div className="flex items-center gap-2">
+                      <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Initiating PayPal Sandbox Order...</span>
+                    </div>
+                  ) : (
+                    <>
+                      <ShieldCheck className="w-4 h-4" />
+                      <span>
+                        Pay with PayPal Sandbox (${cartSubtotal.toFixed(2)})
+                      </span>
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -328,9 +485,9 @@ export const StorefrontDemo: React.FC<StorefrontDemoProps> = ({
             </div>
 
             <div>
-              <h3 className="text-lg font-bold text-[#172B4D]">Payment Captured!</h3>
+              <h3 className="text-lg font-bold text-[#172B4D]">Payment Verified &amp; Captured!</h3>
               <p className="text-xs text-slate-400 mt-0.5">
-                Verified server-side and recorded in your SQLite database.
+                Authoritative transaction recorded in SQLite database with <code>is_demo=False</code>.
               </p>
             </div>
 
@@ -340,13 +497,21 @@ export const StorefrontDemo: React.FC<StorefrontDemoProps> = ({
                 <span className="font-mono font-bold text-[#172B4D]">{successDetails.transaction_id}</span>
               </div>
               <div className="flex justify-between">
+                <span className="text-slate-400">PayPal Order ID:</span>
+                <span className="font-mono text-slate-700">{successDetails.order_id}</span>
+              </div>
+              <div className="flex justify-between">
                 <span className="text-slate-400">PayPal Capture ID:</span>
                 <span className="font-mono text-slate-700">{successDetails.capture_id}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">Amount:</span>
+                <span className="text-slate-400">Authoritative Fee:</span>
+                <span className="font-mono text-rose-600">-${successDetails.fee?.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between border-t border-slate-200 pt-1.5">
+                <span className="font-bold text-[#172B4D]">Net Recorded to Ledger:</span>
                 <span className="font-extrabold text-emerald-600">
-                  ${successDetails.amount?.toFixed(2)} {successDetails.currency}
+                  ${successDetails.net?.toFixed(2)} {successDetails.currency}
                 </span>
               </div>
             </div>
@@ -356,9 +521,9 @@ export const StorefrontDemo: React.FC<StorefrontDemoProps> = ({
                 setSuccessDetails(null);
                 if (onClose) onClose();
               }}
-              className="w-full py-3 bg-[#0070E0] hover:bg-[#005bb8] text-white font-bold text-xs rounded-xl shadow-xs transition-all"
+              className="w-full py-3 bg-[#0070E0] hover:bg-[#005bb8] text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
             >
-              Done & Return to Dashboard
+              Done &amp; Return to Dashboard
             </button>
           </div>
         </div>

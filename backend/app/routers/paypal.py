@@ -33,12 +33,17 @@ def create_paypal_order(payload: PayPalCreateOrderRequest):
         raise HTTPException(status_code=400, detail="Cannot create order without line items")
 
     items_list = [item.model_dump() for item in payload.items]
-    res = paypal_service.create_order(
-        items=items_list,
-        currency=payload.currency,
-        customer_name=payload.customer_name,
-        customer_email=payload.customer_email
-    )
+    try:
+        res = paypal_service.create_order(
+            items=items_list,
+            currency=payload.currency,
+            customer_name=payload.customer_name,
+            customer_email=payload.customer_email
+        )
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"PayPal API error: {str(e)}")
 
     return PayPalCreateOrderResponse(
         order_id=res["order_id"],
@@ -48,6 +53,15 @@ def create_paypal_order(payload: PayPalCreateOrderRequest):
         amount=res["amount"]
     )
 
+@router.get("/orders/{order_id}")
+def get_order_status(order_id: str):
+    if not order_id:
+        raise HTTPException(status_code=400, detail="Order ID is required")
+    try:
+        return paypal_service.get_order_status(order_id)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to check order status: {str(e)}")
+
 @router.post("/capture-order", response_model=PayPalCaptureOrderResponse)
 def capture_paypal_order(payload: PayPalCaptureOrderRequest, db: Session = Depends(get_db)):
     if not payload.order_id:
@@ -55,13 +69,18 @@ def capture_paypal_order(payload: PayPalCaptureOrderRequest, db: Session = Depen
 
     items_list = [item.model_dump() for item in payload.items] if payload.items else None
 
-    result = paypal_service.capture_order(
-        order_id=payload.order_id,
-        db=db,
-        items=items_list,
-        customer_name=payload.customer_name,
-        customer_email=payload.customer_email
-    )
+    try:
+        result = paypal_service.capture_order(
+            order_id=payload.order_id,
+            db=db,
+            items=items_list,
+            customer_name=payload.customer_name,
+            customer_email=payload.customer_email
+        )
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"PayPal capture error: {str(e)}")
 
     if not result.get("success", False):
         raise HTTPException(status_code=400, detail=result.get("message", "Payment capture failed"))

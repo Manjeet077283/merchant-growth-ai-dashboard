@@ -198,6 +198,28 @@ export const api = {
     return res.json();
   },
 
+  async getPayPalOrderStatus(orderId: string): Promise<{ order_id: string; status: string; intent?: string; payer?: any }> {
+    const res = await fetchWithTimeout(`${API_BASE}/paypal/orders/${orderId}`, {}, 15000);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to check order status');
+    }
+    return res.json();
+  },
+
+  async cancelPayPalOrder(orderId: string, reason?: string): Promise<{ success: boolean; status: string; order_id: string; message: string }> {
+    const res = await fetchWithTimeout(`${API_BASE}/paypal/cancel-order`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order_id: orderId, reason }),
+    }, 15000);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to cancel order');
+    }
+    return res.json();
+  },
+
   async chatWithAgent(message: string, history: { role: string; content: string }[] = []): Promise<AiChatResponse> {
     const res = await fetchWithTimeout(`${API_BASE}/ai/chat`, {
       method: 'POST',
