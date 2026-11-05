@@ -12,7 +12,7 @@ The **Merchant Growth AI Dashboard** has undergone a complete master production 
 
 - **GitHub Repository**: [https://github.com/Manjeet077283/merchant-growth-ai-dashboard](https://github.com/Manjeet077283/merchant-growth-ai-dashboard)
 - **Active Branch**: `main`
-- **Latest Commit**: `17d8784` (*feat(store): enable one-click sample demonstration checkout to test live ledger workflows*)
+- **Latest Commit**: `e19cd55` (*feat(store): improve sample checkout with 1-click buy, mode selector, and instant ledger capture*)
 - **Live Backend Web Service**: [https://merchant-growth-ai-dashboard.onrender.com](https://merchant-growth-ai-dashboard.onrender.com)
 - **Live Frontend Static Site**: [https://merchant-growth-ai-dashboard-1.onrender.com](https://merchant-growth-ai-dashboard-1.onrender.com)
 - **Live Health Endpoint**: [https://merchant-growth-ai-dashboard.onrender.com/api/health](https://merchant-growth-ai-dashboard.onrender.com/api/health)
@@ -54,7 +54,7 @@ The **Merchant Growth AI Dashboard** has undergone a complete master production 
 
 | Area | Component / Endpoint | Verification Method | Live Result |
 | :--- | :--- | :--- | :--- |
-| **Backend Tests** | `backend/tests/` | `pytest tests/ -v` | **24/24 PASSED (0.65s)** |
+| **Backend Tests** | `backend/tests/` | `pytest tests/ -v` | **30/30 PASSED (0.71s)** |
 | **Frontend Build** | `frontend/` | `npm run build` (`tsc -b && vite build`) | **0 Errors (5.03s, 654 kB)** |
 | **Security Scan** | Credentials & Secret Audit | `python tests/security_scan.py` | **0 Secrets Found** |
 | **Live Health** | `GET /api/health` | Live HTTP probe via `curl` | **HTTP 200 OK (`production`, `demo_mode: false`)** |
