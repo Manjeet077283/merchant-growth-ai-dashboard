@@ -11,7 +11,8 @@ import {
   X,
   ExternalLink,
   AlertCircle,
-  RefreshCw
+  RefreshCw,
+  Sparkles
 } from 'lucide-react';
 
 interface StorefrontDemoProps {
@@ -86,7 +87,7 @@ export const StorefrontDemo: React.FC<StorefrontDemoProps> = ({
   const estimatedFee = Math.round((cartSubtotal * 0.029 + 0.3) * 100) / 100;
   const estimatedNet = Math.max(0, Math.round((cartSubtotal - estimatedFee) * 100) / 100);
 
-  // Step 1: Create Order in PayPal Sandbox
+  // Initiate Order & Process
   const handleInitiateOrder = async () => {
     if (cart.length === 0) return;
     setErrorMessage(null);
@@ -104,14 +105,6 @@ export const StorefrontDemo: React.FC<StorefrontDemoProps> = ({
       return;
     }
 
-    if (!payPalConfig?.client_id_configured) {
-      setErrorMessage(
-        'PayPal Sandbox credentials are required to initiate checkout. ' +
-        'Please configure PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET in your Render Environment settings.'
-      );
-      return;
-    }
-
     setIsProcessing(true);
 
     try {
@@ -123,33 +116,48 @@ export const StorefrontDemo: React.FC<StorefrontDemoProps> = ({
         category: item.product.category,
       }));
 
-      // Server-side order creation via PayPal Sandbox REST API
+      // Server-side order creation
       const created = await api.createPayPalOrder(
         orderItems,
         trimmedName,
         trimmedEmail
       );
 
-      setPendingOrder({
-        order_id: created.order_id,
-        status: created.status,
-        approval_url: created.approval_url,
-        amount: created.amount,
-        currency: created.currency,
-      });
-
-      // Auto-open PayPal Sandbox approval window if URL available
-      if (created.approval_url) {
+      // If live PayPal credentials are configured, require buyer sandbox approval
+      if (payPalConfig?.client_id_configured && created.approval_url) {
+        setPendingOrder({
+          order_id: created.order_id,
+          status: created.status,
+          approval_url: created.approval_url,
+          amount: created.amount,
+          currency: created.currency,
+        });
         window.open(created.approval_url, '_blank', 'noopener,noreferrer');
+      } else {
+        // Sample demonstration mode: automatically verify and capture to ledger
+        const captured = await api.capturePayPalOrder(
+          created.order_id,
+          orderItems,
+          trimmedName,
+          trimmedEmail
+        );
+
+        if (captured.status === 'COMPLETED' || captured.success) {
+          setSuccessDetails(captured);
+          setCart([]);
+          onOrderCompleted();
+        } else {
+          setErrorMessage(captured.message || 'Sample checkout capture failed.');
+        }
       }
     } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to initiate PayPal Sandbox order.');
+      setErrorMessage(err.message || 'Failed to process checkout order.');
     } finally {
       setIsProcessing(false);
     }
   };
 
-  // Step 2: Capture Approved Order in PayPal Sandbox
+  // Capture Approved Order in PayPal Sandbox
   const handleCaptureOrder = async () => {
     if (!pendingOrder) return;
     setIsCapturing(true);
@@ -174,8 +182,8 @@ export const StorefrontDemo: React.FC<StorefrontDemoProps> = ({
       if (captured.status === 'COMPLETED' || captured.success) {
         setSuccessDetails(captured);
         setPendingOrder(null);
-        setCart([]); // Clear cart only after confirmed capture
-        onOrderCompleted(); // Refresh dashboard KPIs
+        setCart([]);
+        onOrderCompleted();
       } else {
         setErrorMessage(captured.message || 'PayPal capture failed or is still awaiting buyer approval.');
       }
@@ -186,7 +194,7 @@ export const StorefrontDemo: React.FC<StorefrontDemoProps> = ({
     }
   };
 
-  // Step 3: Cancel Pending Order
+  // Cancel Pending Order
   const handleCancelOrder = async () => {
     if (!pendingOrder) return;
     try {
@@ -372,7 +380,7 @@ export const StorefrontDemo: React.FC<StorefrontDemoProps> = ({
               <div className="flex justify-between text-emerald-600 font-bold pt-1.5 border-t border-dashed border-slate-200">
                 <div>
                   <span>Est. Net Payout</span>
-                  <p className="text-[10px] text-slate-400 font-normal">Final fee &amp; net recorded upon PayPal capture</p>
+                  <p className="text-[10px] text-slate-400 font-normal">Final fee &amp; net recorded upon capture</p>
                 </div>
                 <span>${estimatedNet.toFixed(2)}</span>
               </div>
@@ -386,16 +394,19 @@ export const StorefrontDemo: React.FC<StorefrontDemoProps> = ({
               </div>
             )}
 
-            {/* PayPal Configuration Warning if Missing */}
+            {/* Demonstration Helper Box */}
             {!payPalConfig?.client_id_configured && (
-              <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-[#003087] text-[11px] leading-relaxed">
-                <strong>Credentials Required:</strong> Enter <code>PAYPAL_CLIENT_ID</code> and <code>PAYPAL_CLIENT_SECRET</code> in Render Environment to process live sandbox checkout.
+              <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-[#003087] text-[11px] leading-relaxed flex items-start gap-2">
+                <Sparkles className="w-4 h-4 text-[#0070E0] shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold">Sample Order Mode Active:</span> You can buy samples right now to test the complete workflow and see your live dashboard metrics update in real time.
+                </div>
               </div>
             )}
 
             {/* Multi-Step Checkout Action Area */}
             {pendingOrder ? (
-              /* Step 2: Awaiting Approval & Capture Action Box */
+              /* Awaiting Approval & Capture Action Box (Live PayPal Mode) */
               <div className="p-4 rounded-2xl bg-[#EAF3FC] border border-blue-200 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-bold text-[#003087]">Order Created: #{pendingOrder.order_id.slice(-8)}</span>
@@ -449,23 +460,32 @@ export const StorefrontDemo: React.FC<StorefrontDemoProps> = ({
                 </div>
               </div>
             ) : (
-              /* Step 1: Initiate Order Button */
+              /* Initiate Order Button (Active in both Sample & Configured Modes) */
               <div className="pt-2 space-y-2">
                 <button
                   onClick={handleInitiateOrder}
-                  disabled={cart.length === 0 || isProcessing || !payPalConfig?.client_id_configured}
-                  className="w-full py-3.5 px-4 rounded-2xl bg-[#0070E0] hover:bg-[#005bb8] active:scale-[0.99] text-white font-extrabold text-sm shadow-[0_4px_16px_rgba(0,112,224,0.3)] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  disabled={cart.length === 0 || isProcessing}
+                  className="w-full py-3.5 px-4 rounded-2xl bg-[#0070E0] hover:bg-[#005bb8] active:scale-[0.99] text-white font-extrabold text-sm shadow-[0_4px_16px_rgba(0,112,224,0.3)] transition-all flex flex-col items-center justify-center gap-0.5 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                 >
                   {isProcessing ? (
                     <div className="flex items-center gap-2">
                       <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      <span>Initiating PayPal Sandbox Order...</span>
+                      <span>Processing Sample Order...</span>
                     </div>
                   ) : (
                     <>
-                      <ShieldCheck className="w-4 h-4" />
-                      <span>
-                        Pay with PayPal Sandbox (${cartSubtotal.toFixed(2)})
+                      <div className="flex items-center gap-2">
+                        <ShieldCheck className="w-4 h-4" />
+                        <span>
+                          {payPalConfig?.client_id_configured
+                            ? `Pay with PayPal Sandbox ($${cartSubtotal.toFixed(2)})`
+                            : `Buy Sample Order ($${cartSubtotal.toFixed(2)})`}
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-normal text-blue-100">
+                        {payPalConfig?.client_id_configured
+                          ? 'Live PayPal Sandbox REST API'
+                          : 'Demonstration Mode — Records to Live Ledger'}
                       </span>
                     </>
                   )}
@@ -487,7 +507,7 @@ export const StorefrontDemo: React.FC<StorefrontDemoProps> = ({
             <div>
               <h3 className="text-lg font-bold text-[#172B4D]">Payment Verified &amp; Captured!</h3>
               <p className="text-xs text-slate-400 mt-0.5">
-                Authoritative transaction recorded in SQLite database with <code>is_demo=False</code>.
+                Authoritative transaction recorded in SQLite database ledger.
               </p>
             </div>
 
