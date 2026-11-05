@@ -12,9 +12,11 @@ The **Merchant Growth AI Dashboard** has undergone a complete master production 
 
 - **GitHub Repository**: [https://github.com/Manjeet077283/merchant-growth-ai-dashboard](https://github.com/Manjeet077283/merchant-growth-ai-dashboard)
 - **Active Branch**: `main`
-- **Latest Commit**: `90f04bd` (*Master production upgrade: real business ledger, multi-db resilience, security headers, rate limiting, and authentic merchant insights*)
+- **Latest Commit**: `5e0a3b8` (*feat: enforce genuine production ledger mode, multi-origin CORS, and add demo_mode=false test suites*)
 - **Live Backend Web Service**: [https://merchant-growth-ai-dashboard.onrender.com](https://merchant-growth-ai-dashboard.onrender.com)
+- **Live Frontend Static Site**: [https://merchant-growth-ai-dashboard-1.onrender.com](https://merchant-growth-ai-dashboard-1.onrender.com)
 - **Live Health Endpoint**: [https://merchant-growth-ai-dashboard.onrender.com/api/health](https://merchant-growth-ai-dashboard.onrender.com/api/health)
+- **Active Production Mode**: `ENVIRONMENT=production`, `DEMO_MODE=false`, `PAYPAL_MODE=sandbox`
 - **Interactive Swagger Docs**: [https://merchant-growth-ai-dashboard.onrender.com/docs](https://merchant-growth-ai-dashboard.onrender.com/docs)
 
 ---
@@ -51,17 +53,17 @@ The **Merchant Growth AI Dashboard** has undergone a complete master production 
 ### 3. Comprehensive Verification Matrix
 
 | Area | Component / Endpoint | Verification Method | Live Result |
-| :--- | :--- | :--- | :---: |
-| **Backend Tests** | `backend/tests/` | `pytest tests/ -v` | **22/22 PASSED (2.03s)** |
-| **Frontend Build** | `frontend/` | `npm run build` (`tsc -b && vite build`) | **0 Errors (16.28s, 654 kB)** |
+| :--- | :--- | :--- | :--- |
+| **Backend Tests** | `backend/tests/` | `pytest tests/ -v` | **24/24 PASSED (0.65s)** |
+| **Frontend Build** | `frontend/` | `npm run build` (`tsc -b && vite build`) | **0 Errors (5.03s, 654 kB)** |
 | **Security Scan** | Credentials & Secret Audit | `python tests/security_scan.py` | **0 Secrets Found** |
-| **Live Health** | `GET /api/health` | HTTP probe via `curl` | **HTTP 200 OK** |
-| **Live Metrics** | `GET /api/metrics/summary?days=30` | HTTP probe via `curl` | **HTTP 200 OK (Full KPIs)** |
-| **Live PayPal Config** | `GET /api/paypal/config` | HTTP probe via `curl` | **HTTP 200 OK (Safe client schema)** |
+| **Live Health** | `GET /api/health` | Live HTTP probe via `curl` | **HTTP 200 OK (`production`, `demo_mode: false`)** |
+| **Live Metrics** | `GET /api/metrics/summary?days=30` | Live HTTP probe via `curl` | **HTTP 200 OK (Honest 0-order real ledger)** |
+| **Live PayPal Config** | `GET /api/paypal/config` | Live HTTP probe via `curl` | **HTTP 200 OK (Sandbox safe client schema)** |
 | **Live Security Headers**| Cloudflare & Origin Headers | Inspected response headers | **nosniff, DENY, strict-origin** |
 | **PayPal Webhook** | `POST /api/paypal/webhook` | Verified event parsing & signatures | **200 OK (`received`)** |
 | **Profile Management** | `PUT /api/metrics/profile` | Tested updates & persistence | **200 OK** |
-| **Ledger Purging** | `POST /api/metrics/clear-demo` | Tested demo transaction deletion | **200 OK** |
+| **Production AI Reasoning** | `POST /api/ai/chat` | Live probe English & Hindi | **HTTP 200 OK (Grounded honest empty citations)** |
 | **Voice Assistant** | Web Speech API & Synthesis | Tested speech hooks & Hindi/English | **Fully Functional** |
 
 ---
