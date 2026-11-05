@@ -12,7 +12,7 @@ The **Merchant Growth AI Dashboard** has undergone a complete master production 
 
 - **GitHub Repository**: [https://github.com/Manjeet077283/merchant-growth-ai-dashboard](https://github.com/Manjeet077283/merchant-growth-ai-dashboard)
 - **Active Branch**: `main`
-- **Latest Commit**: `5e0a3b8` (*feat: enforce genuine production ledger mode, multi-origin CORS, and add demo_mode=false test suites*)
+- **Latest Commit**: `17d8784` (*feat(store): enable one-click sample demonstration checkout to test live ledger workflows*)
 - **Live Backend Web Service**: [https://merchant-growth-ai-dashboard.onrender.com](https://merchant-growth-ai-dashboard.onrender.com)
 - **Live Frontend Static Site**: [https://merchant-growth-ai-dashboard-1.onrender.com](https://merchant-growth-ai-dashboard-1.onrender.com)
 - **Live Health Endpoint**: [https://merchant-growth-ai-dashboard.onrender.com/api/health](https://merchant-growth-ai-dashboard.onrender.com/api/health)
