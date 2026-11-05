@@ -5,11 +5,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 def _get_demo_mode() -> bool:
-    env = os.getenv("ENVIRONMENT", "development").lower()
     raw_demo = os.getenv("DEMO_MODE")
     if raw_demo is not None:
         return raw_demo.lower() in ("true", "1", "yes")
-    # In production, default DEMO_MODE to False unless explicitly requested
+    env = os.getenv("ENVIRONMENT", "production").lower()
+    # In production, default DEMO_MODE to False (genuine business ledger)
     return False if env == "production" else True
 
 def _get_database_url() -> str:
@@ -22,7 +22,7 @@ def _get_database_url() -> str:
 class Settings(BaseModel):
     PROJECT_NAME: str = "Merchant Growth AI — Intelligent Business Agent"
     VERSION: str = "1.0.0"
-    ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
+    ENVIRONMENT: str = os.getenv("ENVIRONMENT", "production")
     DEMO_MODE: bool = _get_demo_mode()
 
     # Database
@@ -59,7 +59,8 @@ class Settings(BaseModel):
             "http://127.0.0.1:5173",
             "http://localhost:3000",
             "http://127.0.0.1:3000",
-            "https://merchant-growth-ai-dashboard.onrender.com"
+            "https://merchant-growth-ai-dashboard.onrender.com",
+            "https://merchant-growth-ai-dashboard-1.onrender.com"
         ]
         raw = os.getenv("CORS_ORIGINS", "")
         if raw:

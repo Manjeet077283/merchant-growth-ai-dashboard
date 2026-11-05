@@ -257,3 +257,72 @@ def test_clear_demo_and_reset():
     finally:
         db.close()
 
+def test_production_demo_mode_false_empty_state():
+    from app.config import settings
+    from app.models import Transaction
+    db = SessionLocal()
+    prev_mode = settings.DEMO_MODE
+    try:
+        settings.DEMO_MODE = False
+        health = get_health()
+        assert health["demo_mode"] is False
+
+        # In production mode without real orders, list_transactions should only return is_demo == False
+        txns = list_transactions(page=1, page_size=10, status="ALL", query=None, db=db)
+        # Any demo transactions must be excluded
+        assert all(t.is_demo is False for t in txns.transactions)
+
+        # AI chat must return honest empty state without hallucination
+        ai_resp = chat_with_agent(payload=AiChatRequest(message="What is my total revenue?"), db=db)
+        assert "Live Database Status" in ai_resp.reply or "0 completed orders" in ai_resp.reply or "Total Revenue Breakdown" in ai_resp.reply
+    finally:
+        settings.DEMO_MODE = prev_mode
+        db.close()
+
+def test_production_demo_mode_false_with_real_transaction():
+    from app.config import settings
+    from app.models import Transaction
+    from datetime import datetime, timezone
+    db = SessionLocal()
+    prev_mode = settings.DEMO_MODE
+    test_txn = None
+    try:
+        settings.DEMO_MODE = False
+        # Insert a real transaction (is_demo = False)
+        test_txn = Transaction(
+            transaction_id="TXN-REAL-TEST-001",
+            paypal_order_id="ORDER-REAL-001",
+            paypal_capture_id="CAP-REAL-001",
+            customer_name="Authentic Merchant Shopper",
+            customer_email="shopper@authentic-buyer.com",
+            amount=88.50,
+            currency="USD",
+            status="COMPLETED",
+            fee=2.87,
+            net_amount=85.63,
+            payment_method="PAYPAL_SANDBOX",
+            items_json='[{"name": "Whole Bean Ethiopia", "qty": 1, "unit_price": 88.50}]',
+            is_demo=False,
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc)
+        )
+        db.add(test_txn)
+        db.commit()
+
+        # Query metrics in production mode (DEMO_MODE=False)
+        metrics = get_metrics_summary(days=30, db=db)
+        assert metrics.kpis.captured_payments >= 88.50
+        assert metrics.kpis.order_count >= 1
+
+        # Query transactions in production mode
+        txns = list_transactions(page=1, page_size=10, status="ALL", query="Authentic Merchant Shopper", db=db)
+        assert txns.total >= 1
+        assert any(t.transaction_id == "TXN-REAL-TEST-001" for t in txns.transactions)
+    finally:
+        if test_txn:
+            db.delete(test_txn)
+            db.commit()
+        settings.DEMO_MODE = prev_mode
+        db.close()
+
+

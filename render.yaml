@@ -33,7 +33,7 @@ services:
       - key: GEMINI_MODEL
         value: gemini-2.5-flash
       - key: CORS_ORIGINS
-        value: "https://merchant-growth-ai-dashboard.onrender.com"
+        value: "https://merchant-growth-ai-dashboard.onrender.com,https://merchant-growth-ai-dashboard-1.onrender.com"
 
   # 2. React + Vite Frontend Static Site
   - type: static
